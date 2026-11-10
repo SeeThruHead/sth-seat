@@ -17,6 +17,7 @@ jobs:
       - name: Check every project
         uses: dagger/dagger-for-github@v7
         with:
+          version: "0.21.7"
           verb: call
           args: check --source .
 
