@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
-import { harnessNames, skillFolder, skillMarkdown } from "./Skill.ts"
+import { Option } from "effect"
+import { harnessNames, rebuiltWarning, skillFolder, skillMarkdown } from "./Skill.ts"
 
 describe("skill", () => {
   it("names every command an agent uses, so the guide can't drift from the CLI", () => {
@@ -25,5 +26,33 @@ describe("skill", () => {
         "/home/me/.pi/agent/skills/sth-seat"
       ]
     )
+  })
+
+  it("warns when the skills folder is a link or is assembled from links, since a dotfiles tool may rebuild it", () => {
+    const linked = rebuiltWarning({
+      folder: "/home/me/.claude/skills",
+      resolved: "/home/me/.agents/skills",
+      linkedSkills: 0
+    })
+    const assembled = rebuiltWarning({
+      folder: "/home/me/.agents/skills",
+      resolved: "/home/me/.agents/skills",
+      linkedSkills: 3
+    })
+    const plain = rebuiltWarning({
+      folder: "/home/me/.claude/skills",
+      resolved: "/home/me/.claude/skills",
+      linkedSkills: 0
+    })
+
+    assert.include(
+      Option.getOrElse(linked, () => ""),
+      "/home/me/.claude/skills is a link to /home/me/.agents/skills"
+    )
+    assert.include(
+      Option.getOrElse(assembled, () => ""),
+      "holds skills linked in from elsewhere"
+    )
+    assert.isTrue(Option.isNone(plain))
   })
 })

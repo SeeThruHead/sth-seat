@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+
+- `sth-seat skill --install` warns when the skills folder is a link or is assembled from links (a dotfiles tool may
+  rebuild it and remove the skill), and says to keep the skill where that tool assembles from.
+
 ## 0.4.1
 
 - `sth-seat install` from a Homebrew install points the service at `$(brew --prefix)/bin/sth-seat` and makes no

@@ -1,3 +1,5 @@
+import { Option } from "effect"
+
 export const harnesses = {
   agents: { label: "any harness that reads ~/.agents/skills (Codex, OpenCode, and others)", folder: ".agents/skills" },
   claude: { label: "Claude Code", folder: ".claude/skills" },
@@ -10,6 +12,24 @@ export type Harness = keyof typeof harnesses
 export const harnessNames = ["agents", "claude", "opencode", "pi"] as const
 
 export const skillFolder = (home: string, harness: Harness): string => `${home}/${harnesses[harness].folder}/sth-seat`
+
+export type SkillsFolder = {
+  readonly folder: string
+  readonly resolved: string
+  readonly linkedSkills: number
+}
+
+export const rebuiltWarning = (skills: SkillsFolder): Option.Option<string> => {
+  const linked = skills.resolved !== skills.folder
+  if (!linked && skills.linkedSkills === 0) return Option.none()
+  const where = linked
+    ? `${skills.folder} is a link to ${skills.resolved}`
+    : `${skills.folder} holds skills linked in from elsewhere`
+
+  return Option.some(
+    `Warning: ${where}, so a dotfiles tool may rebuild it and remove this skill. Keep the skill where that tool assembles from instead (\`sth-seat skill > <that folder>/sth-seat/SKILL.md\`).`
+  )
+}
 
 export const skillMarkdown = (version: string): string => `---
 name: sth-seat
