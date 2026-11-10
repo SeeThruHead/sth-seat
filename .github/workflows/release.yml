@@ -1,0 +1,72 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag matches the version sth-seat reports
+        run: grep -q "export const version = \"${GITHUB_REF_NAME#v}\"" apps/seat/src/app/Cli.ts
+      - name: Check every project
+        uses: dagger/dagger-for-github@v7
+        with:
+          verb: call
+          args: check --source .
+
+  binaries:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Build the four binaries
+        working-directory: apps/seat
+        run: bun run release
+      - name: Publish the GitHub release
+        working-directory: apps/seat/dist/release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum sth-seat-* > SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" sth-seat-* SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --verify-tag \
+            --notes "See CHANGELOG.md. Install with \`brew install seethruhead/tap/sth-seat\`, or download the binary for your machine, then run \`sth-seat install\`."
+
+  hub-image:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Short revision
+        id: revision
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: Build and push the hub image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/hub/Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: REVISION=${{ steps.revision.outputs.short }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          tags: |
+            ghcr.io/seethruhead/sth-seat-hub:${{ github.ref_name }}
+            ghcr.io/seethruhead/sth-seat-hub:latest
+      - name: Digest
+        run: echo "ghcr.io/seethruhead/sth-seat-hub:${GITHUB_REF_NAME}@${{ steps.push.outputs.digest }}" | tee -a "$GITHUB_STEP_SUMMARY"

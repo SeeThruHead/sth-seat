@@ -1,0 +1,17 @@
+{
+  "$schema": "../../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "bun --bun vitest run --coverage.enabled=false --reporter=dot src/domains src/features"
+  },
+  "mutate": ["src/domains/**/*.ts", "src/features/**/*.ts", "!src/**/*.test.ts", "!src/**/*.testing.ts"],
+  "checkers": [],
+  "tsconfigFile": "stryker-has-no-tsconfig.json",
+  "coverageAnalysis": "off",
+  "inPlace": true,
+  "concurrency": 1,
+  "timeoutMS": 60000,
+  "reporters": ["clear-text", "progress", "json"],
+  "jsonReporter": { "fileName": "reports/mutation/mutation.json" },
+  "thresholds": { "high": 90, "low": 80, "break": null }
+}

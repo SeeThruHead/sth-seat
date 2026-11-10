@@ -1,0 +1,6 @@
+$schema: https://moonrepo.dev/schemas/toolchains.json
+javascript:
+  packageManager: bun
+  installDependencies: false
+bun:
+  version: "1.4.2"

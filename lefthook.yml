@@ -1,0 +1,19 @@
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      run: bun run moon run :format --affected
+    lint:
+      run: bun run moon run :lint --affected
+    typecheck:
+      run: bun run moon run :typecheck --affected
+
+commit-msg:
+  commands:
+    attribution:
+      run: bun packages/lint/attribution-hook.ts {1}
+
+pre-push:
+  commands:
+    test:
+      run: bun run moon run :test --affected

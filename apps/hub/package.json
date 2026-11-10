@@ -1,0 +1,31 @@
+{
+  "name": "hub",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "oxlint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "test": "bun --bun vitest run",
+    "mutate": "stryker run"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.1.2",
+    "@sth-seat/protocol": "workspace:*",
+    "effect": "4.1.2"
+  },
+  "devDependencies": {
+    "@effect/tsgo": "0.67.4",
+    "@effect/vitest": "4.1.2",
+    "@sth-seat/lint": "workspace:*",
+    "@stryker-mutator/core": "10.1.1",
+    "@types/bun": "1.4.3",
+    "@vitest/coverage-istanbul": "5.0.5",
+    "oxfmt": "0.73.0",
+    "oxlint": "1.91.0",
+    "oxlint-tsgolint": "7.0.2006",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  }
+}

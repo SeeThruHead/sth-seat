@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+bundle="${SEAT_BUNDLE:-$HOME/.local/share/sth-seat/sth-seat.js}"
+bun="$(command -v bun || true)"
+[ -n "$bun" ] || bun="$HOME/.bun/bin/bun"
+[ -x "$bun" ] || bun=/opt/homebrew/bin/bun
+[ -f "$bundle" ] || { echo "sth-seat isn't installed on this machine: no bundle at $bundle (see the sth-seat README)" >&2; exit 1; }
+exec "$bun" "$bundle" "$@"

@@ -1,0 +1,21 @@
+name: check
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**/*.md"]
+  pull_request:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check every project
+        uses: dagger/dagger-for-github@v7
+        with:
+          verb: call
+          args: check --source .

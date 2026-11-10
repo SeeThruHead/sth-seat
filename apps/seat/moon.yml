@@ -1,0 +1,16 @@
+$schema: https://moonrepo.dev/schemas/project.json
+tasks:
+  typecheck:
+    command: bun run typecheck
+    inputs: ["**/*", /package.json, /tsconfig.base.json]
+  lint:
+    command: bun run lint
+    inputs: ["**/*"]
+  test:
+    command: bun run test
+    inputs: ["**/*", /.git/HEAD]
+  format:
+    command: bun run format:check
+    inputs: ["**/*", /.oxfmtrc.json]
+  check:
+    deps: [typecheck, lint, format, test]

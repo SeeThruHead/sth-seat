@@ -1,0 +1,12 @@
+node_modules/
+.data*
+.env*
+coverage/
+dist/
+dagger/sdk/
+.moon/cache/
+image.txt
+reports/
+.stryker-tmp/
+.DS_Store
+.tickets/

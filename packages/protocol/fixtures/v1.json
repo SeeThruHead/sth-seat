@@ -1,0 +1,35 @@
+{
+  "commands": [
+    { "_tag": "OpenUrl", "id": "01a1a546-373d-7506-84ae-c8403ccc0cef", "url": "https://example.com/" },
+    {
+      "_tag": "OpenFile",
+      "id": "01a1a546-373d-7506-84ae-c8403ccc0cef",
+      "path": "/home/sth/report.html",
+      "title": "Report"
+    },
+    { "_tag": "ReadFile", "id": "01a1a546-373d-7506-84ae-c8403ccc0cef", "path": "/home/sth/report.html" },
+    {
+      "_tag": "ReceiveFile",
+      "id": "01a1a546-373d-7506-84ae-c8403ccc0cef",
+      "name": "report.html",
+      "bytes": "PGgxPmhpPC9oMT4="
+    }
+  ],
+  "outcomes": [
+    { "_tag": "Done" },
+    { "_tag": "FileRead", "name": "report.html", "bytes": "PGgxPmhpPC9oMT4=" },
+    { "_tag": "Refused", "reason": "xdg-open failed" }
+  ],
+  "opened": {
+    "machine": "cube",
+    "label": "Cube",
+    "kind": "url",
+    "url": "https://example.com/",
+    "message": "Opened"
+  },
+  "whereabouts": {
+    "seat": "cube",
+    "machines": [{ "name": "cube", "label": "Cube", "online": true, "seat": true, "idleSeconds": 3 }],
+    "message": "The user is at Cube"
+  }
+}

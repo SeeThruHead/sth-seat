@@ -1,0 +1,22 @@
+$schema: https://moonrepo.dev/schemas/project.json
+fileGroups:
+  upstream:
+    - /package.json
+    - /tsconfig.base.json
+    - /packages/lint/*.ts
+    - /packages/lint/oxlintrc.json
+tasks:
+  typecheck:
+    command: bun run typecheck
+    inputs: ["**/*", "@group(upstream)"]
+  lint:
+    command: bun run lint
+    inputs: ["**/*", "@group(upstream)"]
+  test:
+    command: bun run test
+    inputs: ["**/*", "@group(upstream)"]
+  format:
+    command: bun run format:check
+    inputs: ["**/*", /.oxfmtrc.json]
+  check:
+    deps: [typecheck, lint, format, test]
