@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1
+
+- `sth-seat install` from a Homebrew install points the service at `$(brew --prefix)/bin/sth-seat` and makes no
+  copy in `~/.local/bin`; after `brew upgrade sth-seat`, run `sth-seat install` to restart on the new version.
+
 ## 0.4.0
 
 - Public on GitHub: tagged releases attach binaries for macOS and Linux and publish the hub image

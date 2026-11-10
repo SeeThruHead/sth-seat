@@ -1,3 +1,5 @@
+import { Option } from "effect"
+
 export const launchdLabel = "sth-seat.daemon"
 
 export const systemdUnit = (executable: string): string => `[Unit]
@@ -54,3 +56,8 @@ export const launchdPlist = (
 `
 
 export const isBunRuntime = (executable: string): boolean => /(^|\/)bun(-[a-z0-9]+)?$/.test(executable)
+
+const brewCellar = /^(.+)\/Cellar\/sth-seat\/[^/]+\/bin\/sth-seat$/
+
+export const brewStablePath = (executable: string): Option.Option<string> =>
+  Option.map(Option.fromNullishOr(brewCellar.exec(executable)?.[1]), (prefix) => `${prefix}/bin/sth-seat`)

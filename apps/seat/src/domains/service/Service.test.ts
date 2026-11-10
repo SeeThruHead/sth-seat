@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest"
-import { isBunRuntime, launchdPlist, systemdUnit } from "./Service.ts"
+import { Option } from "effect"
+import { brewStablePath, isBunRuntime, launchdPlist, systemdUnit } from "./Service.ts"
 
 describe("service files", () => {
   it("start the daemon from the installed executable", () => {
@@ -33,6 +34,25 @@ describe("service files", () => {
         "/tmp/bunny"
       ].map(isBunRuntime),
       [true, true, true, false, false]
+    )
+  })
+
+  it("point a Homebrew install at brew's stable path, which survives upgrades", () => {
+    assert.deepStrictEqual(
+      [
+        "/opt/homebrew/Cellar/sth-seat/0.4.1/bin/sth-seat",
+        "/home/linuxbrew/.linuxbrew/Cellar/sth-seat/0.4.1/bin/sth-seat",
+        "/home/me/.local/bin/sth-seat",
+        "/opt/homebrew/Cellar/other/1.0/bin/sth-seat",
+        "/home/me/Downloads/sth-seat-darwin-arm64"
+      ].map(brewStablePath),
+      [
+        Option.some("/opt/homebrew/bin/sth-seat"),
+        Option.some("/home/linuxbrew/.linuxbrew/bin/sth-seat"),
+        Option.none(),
+        Option.none(),
+        Option.none()
+      ]
     )
   })
 })

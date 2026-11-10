@@ -7,7 +7,7 @@ import { Checks, fail, healthy, lineOf, ok, toolCheck, warn } from "../../domain
 import type { Check } from "../../domains/doctor/Doctor.ts"
 import { Files } from "../../domains/files/Files.ts"
 import { Policies } from "../../domains/policy/Policies.ts"
-import { isBunRuntime } from "../../domains/service/Service.ts"
+import { brewStablePath, isBunRuntime } from "../../domains/service/Service.ts"
 import { platformLayer, serviceLayer, toolsNeededOn } from "../../platform/Platform.ts"
 import { ServiceManager } from "../../platform/Service.ts"
 import { Ports } from "../../platform/Ports.ts"
@@ -134,12 +134,21 @@ const copiedTo = Effect.fnUntraced(function* (running: string, target: string) {
   return target
 })
 
+const brewInstalled = Effect.fnUntraced(function* (running: string) {
+  const fs = yield* FileSystem.FileSystem
+  const real = yield* fs.realPath(running).pipe(Effect.orElseSucceed(() => running))
+
+  return brewStablePath(real)
+})
+
 const installedExecutable = Effect.fnUntraced(function* (found: Settings) {
   const path = yield* Path.Path
   const target = path.join(found.home, ".local", "bin", "sth-seat")
   const running = process.execPath
   if (isBunRuntime(running)) return yield* wrapperAt(target)
   if (running === target) return target
+  const brew = yield* brewInstalled(running)
+  if (Option.isSome(brew)) return brew.value
 
   return yield* copiedTo(running, target)
 })

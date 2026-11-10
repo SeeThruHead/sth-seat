@@ -114,10 +114,11 @@ printf %s "$token" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -
    sth-seat install
    ```
 
-   It copies itself to `~/.local/bin/sth-seat` and installs a user service: a systemd user unit on Linux (run
-   `loginctl enable-linger` to keep it up without a login) or a launchd agent on macOS (it logs to
-   `~/Library/Logs/sth-seat.log`). Run the same command with a newer binary to upgrade; `sth-seat uninstall`
-   removes the service.
+   It installs a user service: a systemd user unit on Linux (run `loginctl enable-linger` to keep it up without a
+   login) or a launchd agent on macOS (it logs to `~/Library/Logs/sth-seat.log`). Installed with Homebrew, the
+   service runs brew's `$(brew --prefix)/bin/sth-seat`, so `brew upgrade sth-seat` then `sth-seat install`
+   (which restarts it) upgrades. A downloaded binary copies itself to `~/.local/bin/sth-seat` instead; run the
+   same command with a newer binary to upgrade. `sth-seat uninstall` removes the service.
 
 ## Check a machine
 

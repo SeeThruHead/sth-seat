@@ -29,8 +29,9 @@ Read `README.md` for what it is and how to set it up, and `docs/architecture.md`
   Put fake `xdg-open`/`open`/`handoff` scripts first on `PATH` (and `SEAT_HANDOFF=<fake>` on macOS) so nothing
   opens on the real screen. Never test against a hub people are using.
 - Release: `bun run release` in `apps/seat` compiles `dist/release/sth-seat-{linux,darwin}-{x64,arm64}` (Bun's
-  `--compile`, cross-compiled from any machine). `sth-seat install` copies the running binary to
-  `~/.local/bin/sth-seat` and installs and (re)starts the user service; service files come from
+  `--compile`, cross-compiled from any machine). `sth-seat install` installs and (re)starts the user
+  service: run from Homebrew it points the service at `$(brew --prefix)/bin/sth-seat` and copies nothing,
+  otherwise it copies the running binary to `~/.local/bin/sth-seat` first; service files come from
   `src/domains/service/Service.ts`. `bun run bundle` still writes `dist/sth-seat.js` for running under Bun.
 - Mutation testing: `bun run mutate` in `apps/hub` or `apps/seat` (Stryker's command runner, so the suites run
   under Bun; it mutates `src/domains` and `src/features` in place, one mutant at a time, and restores them).
