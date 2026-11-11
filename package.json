@@ -11,21 +11,18 @@
   ],
   "scripts": {
     "prepare": "bun run setup",
-    "setup": "bun run patch && lefthook install",
-    "patch": "effect-tsgo patch --oxlint",
-    "unpatch": "effect-tsgo unpatch --oxlint",
+    "setup": "lefthook install",
     "moon": "moon",
     "check": "moon run :check",
     "check:affected": "moon run :check --affected",
     "ci": "dagger call check --source ."
   },
   "devDependencies": {
-    "@effect/tsgo": "0.67.4",
+    "@effect/tsgo": "0.67.7",
     "@moonrepo/cli": "2.6.4",
     "lefthook": "2.2.2",
     "oxfmt": "0.73.0",
     "oxlint": "1.91.0",
-    "oxlint-tsgolint": "7.0.2006",
     "typescript": "7.0.2"
   },
   "overrides": {

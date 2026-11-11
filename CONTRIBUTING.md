@@ -8,7 +8,7 @@ and what reviewers check, and it applies to people as much as to agents.
 You need [Bun](https://bun.sh) 1.4 or newer.
 
 ```sh
-bun install       # also patches the Effect language service into tsc and oxlint, and installs the git hooks
+bun install       # also installs the git hooks; typecheck and lint run on tsrs through @effect/tsgo
 bun run check     # typecheck, lint, format check and tests for every project
 ```
 

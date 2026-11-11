@@ -74,8 +74,10 @@ Read `README.md` for what it is and how to set it up, and `docs/architecture.md`
 `src/app/main.ts`, `src/app/server.ts` and hooks; no function that only wraps `Effect.gen`; apps don't import
 each other; domains don't import each other; only `src/platform/` may start processes; `handler.ts` files don't
 import transports; `packages/protocol` imports no platform code; `Rpc.make`, `RpcGroup.make`, `Tool.make` and
-`Toolkit.make` appear only in `packages/protocol/src/Action.ts`. Plus the Effect language service rules (through
-`effect-tsgo patch --oxlint`), with the few left off listed in `packages/lint/oxlintrc.json`.
+`Toolkit.make` appear only in `packages/protocol/src/Action.ts`. Plus the Effect language service rules, run on tsrs
+(`effect-tsgo --tsrs-lint oxlint`), with the few left off listed in `packages/lint/oxlintrc.json`. Typecheck is
+`effect-tsgo tsrs` (the Rust TypeScript port, 7.1 beta semantics, shipped inside `@effect/tsgo`); nothing in
+`node_modules` is patched.
 
 ## What reviewers check instead
 

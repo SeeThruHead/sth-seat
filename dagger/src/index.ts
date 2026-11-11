@@ -21,7 +21,6 @@ export class SthSeatCi {
       .withEnvVariable("CI", "true")
       .withExec(["git", "config", "--global", "--add", "safe.directory", "/repo"])
       .withExec(["bun", "install", "--frozen-lockfile", "--ignore-scripts"])
-      .withExec(["bun", "run", "patch"])
       .withExec(["bun", "run", "moon", "run", ":check", "--concurrency", "4"])
       .stdout()
   }

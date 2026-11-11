@@ -50,7 +50,9 @@ class NoReport extends Schema.TaggedError<NoReport, { readonly brand: unique sym
 const lintFixtures = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
   const output = yield* spawner.string(
-    ChildProcess.make("./node_modules/.bin/oxlint", [
+    ChildProcess.make("./node_modules/.bin/effect-tsgo", [
+      "--tsrs-lint",
+      "oxlint",
       "--no-ignore",
       "-c",
       "fixtures.oxlintrc.json",
@@ -64,7 +66,7 @@ const lintFixtures = Effect.gen(function* () {
     Effect.mapError(
       () =>
         new NoReport({
-          hint: "oxlint printed no report; an unpatched oxlint has no effecttsgo plugin, run `bun run patch`",
+          hint: "oxlint printed no report; run it through `effect-tsgo --tsrs-lint oxlint`, which adds the effecttsgo plugin",
           output
         })
     )
