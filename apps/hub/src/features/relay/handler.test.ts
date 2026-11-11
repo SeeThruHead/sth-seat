@@ -99,7 +99,10 @@ describe("relay", () => {
         yield* relayMore(tower, input)
         yield* Fiber.interrupt(draining)
         const late = yield* Effect.flip(relayMore(tower, input))
-        const commands = yield* daemon.seen
+        const commands = yield* Effect.yieldNow.pipe(
+          Effect.andThen(daemon.seen),
+          Effect.repeat({ until: (seen) => seen.length >= 3, times: 1000 })
+        )
 
         assert.deepStrictEqual(tagsOf(commands), ["Relayed", "Relayed", "Abort"])
         assert.strictEqual(late.reason, "That session isn't running any more.")
