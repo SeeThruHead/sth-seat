@@ -30,7 +30,8 @@ const machineOf = (settings: MachineSettings): Machine => ({
   name: settings.name,
   label: settings.label,
   hostnames: settings.hostnames,
-  publicKey: Option.fromNullishOr(settings.publicKey)
+  publicKey: Option.fromNullishOr(settings.publicKey),
+  secrets: settings.secrets
 })
 
 const machinesOf = (settings: HubSettings) => settings.machines.map(machineOf)

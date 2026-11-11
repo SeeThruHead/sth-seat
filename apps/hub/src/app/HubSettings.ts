@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Schema } from "effect"
 import { Hostname, MachineLabel, MachineName } from "@sth-seat/protocol/Ids.ts"
+import { SecretsKept } from "@sth-seat/protocol/Daemon.ts"
 import { PublicKeyText } from "@sth-seat/protocol/Keys.ts"
 
 export const TokenHash = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{43}$/)).pipe(Schema.brand("TokenHash"))
@@ -9,7 +10,8 @@ export const MachineSettings = Schema.Struct({
   name: MachineName,
   label: MachineLabel,
   hostnames: Schema.Array(Hostname).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
-  publicKey: Schema.optionalKey(PublicKeyText)
+  publicKey: Schema.optionalKey(PublicKeyText),
+  secrets: SecretsKept.pipe(Schema.withDecodingDefaultKey(Effect.succeed("seat" as const)))
 })
 export type MachineSettings = typeof MachineSettings.Type
 

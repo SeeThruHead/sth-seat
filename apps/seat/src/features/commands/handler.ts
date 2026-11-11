@@ -11,8 +11,8 @@ import { Audit } from "../../domains/audit/Audit.ts"
 import { Files } from "../../domains/files/Files.ts"
 import { Me } from "../../domains/identity/Me.ts"
 import { Policies } from "../../domains/policy/Policies.ts"
-import { decide, expandHome, hub } from "../../domains/policy/Policy.ts"
-import type { Capability } from "../../domains/policy/Policy.ts"
+import { decide, expandHome, hub, keepsSecrets } from "../../domains/policy/Policy.ts"
+import type { Capability, PolicyFile } from "../../domains/policy/Policy.ts"
 import { problemOf } from "../../domains/problem/Problem.ts"
 import { Tunnels } from "../../domains/tunnels/Tunnels.ts"
 import { Desktop } from "../../platform/Desktop.ts"
@@ -46,6 +46,12 @@ const needs = (command: HubMade): { readonly capability: Capability; readonly pa
     ? { capability: "read", path: Option.some(command.path) }
     : { capability: "receive", path: Option.none() }
 
+const keptHere =
+  "Secrets asked from this machine stay on it (secrets: here in ~/.config/sth-seat/policy.yaml), so it takes none through the hub."
+
+const refusesSecret = (command: HubMade, policy: PolicyFile): boolean =>
+  command._tag === "StoreSecret" && keepsSecrets(policy)
+
 const whyNot = Effect.fnUntraced(function* (command: HubMade, home: string) {
   const audit = yield* Audit
   const policies = yield* Policies
@@ -54,6 +60,7 @@ const whyNot = Effect.fnUntraced(function* (command: HubMade, home: string) {
   if (shared && (yield* isOwnShare(command.grant, command.path, home))) return Option.none<string>()
   const policy = yield* policies.current.pipe(Effect.result)
   if (Result.isFailure(policy)) return Option.some(policy.failure.message)
+  if (refusesSecret(command, policy.success)) return Option.some(keptHere)
   const decision = decide(policy.success, { caller: hub, ...needs(command) }, home)
 
   return Result.isFailure(decision) ? Option.some(decision.failure) : Option.none<string>()

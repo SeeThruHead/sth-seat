@@ -71,7 +71,7 @@ Only for what they should know soon: a long job finished or failed, a decision t
 path=$(sth-seat ask-secret api-token "API token for the staging deploy?")
 \`\`\`
 
-The user types it into a hidden prompt on the seat. It is written to a mode-600 file on this machine and only the path is printed. Read it from that file where it is needed (\`--token-file "$path"\`, \`$(cat "$path")\` inside the command that uses it). Never print it, echo it or put it in the conversation.
+The user types it into a hidden prompt on the seat (on this machine itself when its policy says \`secrets: here\`). It is written to a mode-600 file on this machine and only the path is printed. Read it from that file where it is needed (\`--token-file "$path"\`, \`$(cat "$path")\` inside the command that uses it). Never print it, echo it or put it in the conversation.
 
 ## Work on another machine
 

@@ -10,7 +10,11 @@ import { sightings } from "../where/handler.ts"
 
 const answerTime = "180 seconds"
 
+export const keptOn = (origin: Machine): string =>
+  `Secrets asked from ${origin.label} stay on it: run \`sth-seat ask-secret\` there, which asks on that machine and never sends the secret through the hub.`
+
 export const askSecret = Effect.fn("Secret.askSecret")(function* (request: AskSecretRequest, origin: Machine) {
+  if (origin.secrets === "here") return yield* failed(keptOn(origin))
   const found = yield* sightings
   const seat = seatOf(found)
   if (Option.isNone(seat)) return yield* failed(nobodyConnected)

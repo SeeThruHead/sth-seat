@@ -29,7 +29,8 @@ describe("Roster", () => {
         name: MachineName.make("studio"),
         label: MachineLabel.make("Studio"),
         hostnames: [Hostname.make("studio-old"), Hostname.make("studio-new")],
-        publicKey: Option.none()
+        publicKey: Option.none(),
+        secrets: "seat" as const
       }
       const found = yield* Effect.forEach(
         ["studio", "studio-new", "studio-new.local", "studio-new.localdomain"],

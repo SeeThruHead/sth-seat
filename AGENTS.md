@@ -92,6 +92,8 @@ import transports; `packages/protocol` imports no platform code; `Rpc.make`, `Rp
   replay); replies are signed and numbered. Every call is in the receiver's audit log.
 - A secret from `ask_user_secret` never reaches the agent: it is `Redacted` in the protocol, written to a
   mode-600 file on the asking machine, and only the path goes back.
+- A machine with `secrets: here` (its policy, and its entry in the hub's config) keeps its secrets: `ask-secret`
+  prompts on it without the hub, its daemon refuses `StoreSecret`, and the hub refuses secret requests from it.
 - A file sent to the seat (`open`) goes only to the seat, at most 32 MB, regular files only, into its own inbox
   folder. `cp` paths are resolved (`~`, symlinks) on the owning machine before its policy's folders are checked.
 - Daemon protocol schemas only grow: new fields optional, nothing renamed or removed (daemons may be older than

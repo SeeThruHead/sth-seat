@@ -54,6 +54,9 @@ export const Notify = Schema.TaggedStruct("Notify", { id: CommandId, ...notifyUs
 
 export const secretsFolder = [".local", "share", "sth-seat", "secrets"] as const
 
+export const SecretsKept = Schema.Literals(["seat", "here"])
+export type SecretsKept = typeof SecretsKept.Type
+
 export const storedSecretPath = (name: SecretName): string => ["~", ...secretsFolder, name].join("/")
 
 export const SecretDestination = Schema.Struct({

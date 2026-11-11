@@ -163,6 +163,21 @@ describe("execute", () => {
     )
   )
 
+  it.effect("refuses to store a secret the hub carried when this machine keeps its secrets, and writes nothing", () =>
+    inMachine(
+      Effect.fnUntraced(function* (folder: string) {
+        const fs = yield* FileSystem.FileSystem
+        yield* writePolicy(folder, "secrets: here\nallow:\n  - from: [hub]\n    can: [receive]\n")
+        const name = SecretName.make("plex-token")
+        const stored = yield* execute({ _tag: "StoreSecret", id, name, value: Redacted.make("s3cret") }, home)
+        const written = yield* fs.exists(`${folder}/secrets/plex-token`)
+
+        assert.include(reasonOf(stored), "Secrets asked from this machine stay on it")
+        assert.isFalse(written)
+      })
+    )
+  )
+
   it.effect("says the user didn't answer when the prompt is cancelled", () =>
     Effect.gen(function* () {
       const outcome = yield* withDesktop(desktopThat(() => Effect.void))(

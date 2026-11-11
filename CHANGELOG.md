@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- `secrets: here` keeps a machine's secrets on it. In its `policy.yaml`, `sth-seat ask-secret` asks on that machine
+  (the Herdr app's prompt through `herdr-secret` on macOS, when it is there) and writes the file without contacting
+  the hub, and the daemon refuses any secret the hub tries to store there. On its entry in the hub's config, the
+  hub refuses `ask_user_secret` and the `AskSecret` RPC from it before asking any seat.
+
 ## 0.4.2
 
 - `sth-seat skill --install` warns when the skills folder is a link or is assembled from links (a dotfiles tool may

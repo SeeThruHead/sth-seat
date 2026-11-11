@@ -1,12 +1,20 @@
 import { Duration, Effect, Option } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { Notified, Opened, SecretStored, Whereabouts } from "@sth-seat/protocol/Actions.ts"
+import type { AskSecretRequest } from "@sth-seat/protocol/Actions.ts"
 import { SecretName, Title } from "@sth-seat/protocol/Ids.ts"
+import { Files } from "../../domains/files/Files.ts"
 import { localTarget } from "../../domains/files/LocalTarget.ts"
+import { Policies } from "../../domains/policy/Policies.ts"
+import { keepsSecrets } from "../../domains/policy/Policy.ts"
+import { askHere } from "../../features/secrets/handler.ts"
+import { platformLayer } from "../../platform/Platform.ts"
 import { askHub } from "../Hub.ts"
+import { requireIdentity } from "../Identity.ts"
 import { shareGrant } from "../Remote.ts"
 import { jsonFlag, report } from "./Output.ts"
-import { withHub } from "./Settings.ts"
+import { hubUrlOf, settings, withHub } from "./Settings.ts"
+import type { Settings } from "./Settings.ts"
 
 const promptWait = Duration.minutes(4)
 
@@ -92,6 +100,23 @@ const notify = Command.make(
   )
 )
 
+const askOnThisMachine = Effect.fnUntraced(function* (found: Settings, request: AskSecretRequest) {
+  const me = yield* requireIdentity(found.identity)
+
+  return yield* askHere(request, me.name).pipe(
+    Effect.provide([
+      platformLayer({ os: process.platform, handoff: found.handoff, ...found.session }),
+      Files.layer(found.inbox, found.secrets)
+    ])
+  )
+})
+
+const askOnSeat = Effect.fnUntraced(function* (found: Settings, request: AskSecretRequest) {
+  const hubUrl = yield* hubUrlOf(found)
+
+  return yield* askHub({ ...found, hubUrl }, (hub) => hub.AskSecret(request), promptWait)
+})
+
 const askSecret = Command.make(
   "ask-secret",
   {
@@ -105,14 +130,18 @@ const askSecret = Command.make(
     json: jsonFlag
   },
   Effect.fn("Cli.askSecret")(function* ({ name, question, json }) {
-    const found = yield* withHub
-    const stored = yield* askHub(found, (hub) => hub.AskSecret({ name, question }), promptWait)
+    const found = yield* settings
+    const policy = yield* Policies.use((policies) => policies.current).pipe(
+      Effect.provide(Policies.layer(found.policyFile))
+    )
+    const request = { name, question }
+    const stored = keepsSecrets(policy) ? yield* askOnThisMachine(found, request) : yield* askOnSeat(found, request)
 
     yield* report(SecretStored, json, stored, stored.path)
   })
 ).pipe(
   Command.withDescription(
-    "Ask the user for a secret in a hidden prompt on their seat; it lands in a mode-600 file here and only the path is printed"
+    "Ask the user for a secret in a hidden prompt on their seat (on this machine itself when its policy says secrets: here); it lands in a mode-600 file here and only the path is printed"
   )
 )
 

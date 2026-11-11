@@ -57,6 +57,7 @@ machines:
     label: Laptop
     hostnames: [my-laptop]
     publicKey: <from sth-seat key>
+    secrets: here                  # optional: secrets asked from this machine stay on it (see below)
 ```
 
 To make the MCP token and its hash:
@@ -107,6 +108,12 @@ printf %s "$token" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -
    `tunnel` (reach this machine's localhost ports) and `receive` (pages, files, notifications and secret prompts
    from the hub). Anything not listed is refused. With no policy file, only the hub may deliver things. A machine
    that should only receive, such as a work laptop, lists just `- from: [hub]` with `can: [receive]`.
+
+   `secrets: here` (a top-level key next to `allow`) keeps this machine's secrets on it: `sth-seat ask-secret`
+   asks on this machine's own screen and stores the answer here without contacting the hub, and the daemon
+   refuses any secret the hub tries to store here. Set it on a machine whose secrets must never reach the others
+   (a work laptop), together with `secrets: here` on its entry in the hub's config, which makes the hub refuse
+   `ask_user_secret` from it. Prompts the hub sends it for other machines are still answered.
 
 4. Install and start the daemon:
 

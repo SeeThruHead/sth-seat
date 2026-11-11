@@ -1,5 +1,6 @@
 import { Context, Layer, Option } from "effect"
 import type { Hostname, MachineLabel, MachineName } from "@sth-seat/protocol/Ids.ts"
+import type { SecretsKept } from "@sth-seat/protocol/Daemon.ts"
 import type { PublicKeyText } from "@sth-seat/protocol/Keys.ts"
 
 export type Machine = {
@@ -7,6 +8,7 @@ export type Machine = {
   readonly label: MachineLabel
   readonly hostnames: ReadonlyArray<Hostname>
   readonly publicKey: Option.Option<PublicKeyText>
+  readonly secrets: SecretsKept
 }
 
 const normalized = (hostname: string): string =>

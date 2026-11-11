@@ -16,14 +16,16 @@ export const macMachine: Machine = {
   name: cube,
   label: MachineLabel.make("Cube"),
   hostnames: [Hostname.make("Office-Cube")],
-  publicKey: Option.none()
+  publicKey: Option.none(),
+  secrets: "seat"
 }
 
 export const devMachine: Machine = {
   name: tower,
   label: MachineLabel.make("Tower"),
   hostnames: [Hostname.make("Tower")],
-  publicKey: Option.none()
+  publicKey: Option.none(),
+  secrets: "seat"
 }
 
 export const machines: ReadonlyArray<Machine> = [macMachine, devMachine]

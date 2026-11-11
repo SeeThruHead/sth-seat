@@ -15,7 +15,7 @@ const settingsFile = Effect.fnUntraced(function* (text: string) {
 
 describe("readSettings", () => {
   it.effect(
-    "reads machines and the MCP token hash, defaulting hostnames to none and ignoring fields it no longer uses",
+    "reads machines and the MCP token hash, defaulting hostnames to none, secrets to the seat, and ignoring fields it no longer uses",
     () =>
       Effect.gen(function* () {
         const path = yield* settingsFile(
@@ -26,14 +26,22 @@ describe("readSettings", () => {
             "    label: Tower",
             "    address: 192.0.2.10",
             `    tokenHash: ${hash}`,
-            `    publicKey: ${"a".repeat(43)}`
+            `    publicKey: ${"a".repeat(43)}`,
+            "  - name: laptop",
+            "    label: Laptop",
+            "    secrets: here"
           ].join("\n")
         )
         const settings = yield* readSettings(path)
 
+        assert.strictEqual(settings.machines[0]?.publicKey, "a".repeat(43))
+
         assert.deepStrictEqual(
-          settings.machines.map((machine) => [String(machine.name), machine.publicKey, machine.hostnames.length]),
-          [["tower", "a".repeat(43), 0]]
+          settings.machines.map((machine) => [String(machine.name), machine.hostnames.length, machine.secrets]),
+          [
+            ["tower", 0, "seat"],
+            ["laptop", 0, "here"]
+          ]
         )
       }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
   )

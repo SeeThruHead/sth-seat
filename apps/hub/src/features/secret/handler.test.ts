@@ -81,4 +81,18 @@ describe("askSecret", () => {
       assert.strictEqual(stranger.message, "The hub doesn't know stranger.")
     }).pipe(Effect.scoped, Effect.provide(hubServices))
   )
+
+  it.effect("refuses a machine whose secrets stay on it before asking the seat", () =>
+    Effect.gen(function* () {
+      const mac = yield* fakeDaemon(cube, seatAnswers)
+      yield* fakeDaemon(tower, originStores)
+      yield* sitAt(cube, [tower])
+      const kept = { ...devMachine, secrets: "here" as const }
+      const refused = yield* Effect.flip(askSecret(request, kept))
+      const macSaw = yield* mac.seen
+
+      assert.include(refused.message, "Secrets asked from Tower stay on it")
+      assert.deepStrictEqual(macSaw, [])
+    }).pipe(Effect.scoped, Effect.provide(hubServices))
+  )
 })

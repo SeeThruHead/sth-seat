@@ -66,6 +66,12 @@
   `~/.local/share/sth-seat/secrets/<name>` (folder 700, file 600). Only the path goes back to the agent. The
   value is a `Redacted` everywhere in the protocol, so it never shows up in logs, spans or the audit log; it
   passes through the hub's memory and the TLS connection, nothing else.
+- **Some machines keep their secrets.** A machine whose policy says `secrets: here` never sends a secret request to
+  the hub: `sth-seat ask-secret` prompts on its own desktop and writes the file itself, and its daemon refuses
+  `StoreSecret`, so nothing typed on another machine and carried by the hub lands there either. The hub's
+  `secrets: here` on that machine's entry refuses `ask_user_secret` and the `AskSecret` RPC for it before any seat
+  is asked. Either side alone keeps the secret off the other machines; both are set so a mistake in one config
+  doesn't leak.
 - **Every call is logged where it ran.** `~/.local/state/sth-seat/audit.jsonl` has one line per command
   (caller, action, target, result); `sth-seat log` shows the newest.
 - **One open handler, two transports.** `open_for_user` (MCP) and `Open` (RPC, used by the CLI) share the

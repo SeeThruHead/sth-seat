@@ -20,7 +20,8 @@ import type { HubSettings } from "./HubSettings.ts"
 const settingsOf = (machine: Machine) => ({
   name: machine.name,
   label: machine.label,
-  hostnames: machine.hostnames
+  hostnames: machine.hostnames,
+  secrets: machine.secrets
 })
 
 const settings: HubSettings = {
@@ -190,6 +191,7 @@ const keyedHub = Effect.gen(function* () {
       name: machine.name,
       label: machine.label,
       hostnames: machine.hostnames,
+      secrets: machine.secrets,
       ...Option.match(machine.publicKey, { onNone: () => ({}), onSome: (publicKey) => ({ publicKey }) })
     }))
   }

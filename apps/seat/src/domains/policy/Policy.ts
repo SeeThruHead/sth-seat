@@ -1,4 +1,5 @@
 import { Effect, Option, Result, Schema } from "effect"
+import { SecretsKept } from "@sth-seat/protocol/Daemon.ts"
 import { MachineName } from "@sth-seat/protocol/Ids.ts"
 import { PublicKeyText } from "@sth-seat/protocol/Keys.ts"
 
@@ -18,7 +19,8 @@ export type Rule = typeof Rule.Type
 
 export const PolicyFile = Schema.Struct({
   machines: Schema.Record(MachineName, PublicKeyText).pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
-  allow: Schema.Array(Rule).pipe(Schema.withDecodingDefaultKey(Effect.succeed([])))
+  allow: Schema.Array(Rule).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
+  secrets: Schema.optionalKey(SecretsKept)
 })
 export type PolicyFile = typeof PolicyFile.Type
 
@@ -70,6 +72,8 @@ export const decide = (policy: PolicyFile, ask: Ask, home: string): Result.Resul
     `This machine's policy doesn't let ${named(ask.caller)} ${ask.capability}${where} (~/.config/sth-seat/policy.yaml).`
   )
 }
+
+export const keepsSecrets = (policy: PolicyFile): boolean => policy.secrets === "here"
 
 export const keyOf = (policy: PolicyFile, machine: MachineName): Option.Option<PublicKeyText> =>
   Option.fromNullishOr(policy.machines[machine])
