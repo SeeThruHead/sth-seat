@@ -101,7 +101,12 @@ describe("relayed commands", () => {
         )
         const replies = yield* setup.waitForEnd
         const audit = yield* Audit
-        const logged = yield* audit.recent(5)
+        const logged = yield* audit
+          .recent(5)
+          .pipe(
+            Effect.repeat({ until: (entries) => entries.length >= 2, schedule: Schedule.spaced("20 millis") }),
+            Effect.timeout("10 seconds")
+          )
 
         assert.strictEqual(text(replies.map((one) => one.event)), "hi\n")
         assert.deepStrictEqual(replies.at(-1)?.event, { _tag: "Exited", code: 4 })
