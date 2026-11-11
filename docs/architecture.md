@@ -6,8 +6,8 @@
   with its own key, reports how long the machine has been idle, opens what the hub sends, and runs what other
   machines ask of it when its own policy allows.
 - Agents reach the hub's MCP endpoint at `/mcp`, directly or through an MCP router, with one bearer token.
-- On a machine, `sth-seat open`, `where`, `notify` and `ask-secret` call the hub's RPCs, and `sth-seat run` and
-  `sth-seat cp` start a session on another machine through the hub's `Relay` RPC. All of them sign in with the
+- On a machine, `sth-seat open`, `where`, `notify` and `ask-secret` call the hub's RPCs, and `sth-seat run`,
+  `sth-seat cp` and `sth-seat send` start a session on another machine through the hub's `Relay` RPC. All of them sign in with the
   machine's key.
 
 ## Decisions
@@ -72,6 +72,11 @@
   `secrets: here` on that machine's entry refuses `ask_user_secret` and the `AskSecret` RPC for it before any seat
   is asked. Either side alone keeps the secret off the other machines; both are set so a mistake in one config
   doesn't leak.
+- **Messages are data.** `sth-seat send` seals a `Message` request like any other; the receiver checks the
+  signature and its policy's `messages.from` (independent of `allow`, so a machine with no shell rule can still
+  take requests), appends it to `messages.jsonl` in its state folder, notifies, optionally copies it to the
+  clipboard (`pbcopy`, `wl-copy`), and answers `Finished`. Nothing in a message is ever run; the agent reading
+  `sth-seat inbox` decides what to do.
 - **Every call is logged where it ran.** `~/.local/state/sth-seat/audit.jsonl` has one line per command
   (caller, action, target, result); `sth-seat log` shows the newest.
 - **One open handler, two transports.** `open_for_user` (MCP) and `Open` (RPC, used by the CLI) share the

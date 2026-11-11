@@ -13,8 +13,9 @@ import { Roster } from "../../domains/roster/Roster.ts"
 
 const failed = (reason: string) => new RelayFailed({ reason })
 
-const startsSession = (request: Request): boolean =>
-  request._tag === "Run" || request._tag === "Read" || request._tag === "Write" || request._tag === "Tunnel"
+const sessionStarters: ReadonlyArray<Request["_tag"]> = ["Run", "Read", "Write", "Tunnel", "Message"]
+
+const startsSession = (request: Request): boolean => sessionStarters.includes(request._tag)
 
 const signedBy = Effect.fnUntraced(function* (caller: MachineName, sealed: Sealed) {
   const roster = yield* Roster
@@ -58,7 +59,7 @@ export const relay = Effect.fn("Relay.relay")(function* (caller: MachineName, se
   const context = yield* Effect.context<Links | Relays>()
   const envelope = yield* signedBy(caller, sealed)
   if (!startsSession(envelope.request))
-    return yield* failed(`A session starts with Run, Read, Write or Tunnel, not ${envelope.request._tag}.`)
+    return yield* failed(`A session starts with Run, Read, Write, Tunnel or Message, not ${envelope.request._tag}.`)
   yield* Effect.annotateCurrentSpan({ from: caller, to: envelope.to, request: envelope.request._tag })
   const route = routeOf(envelope)
   const replies = yield* relays.open(route)

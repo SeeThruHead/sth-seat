@@ -106,17 +106,18 @@ const answerIn = (output: string): Redacted.Redacted =>
 type Run = (
   command: string,
   args: ReadonlyArray<string>,
-  timeout: Duration.Input
+  timeout: Duration.Input,
+  input?: string
 ) => Effect.Effect<string, CommandFailed>
 
 const runner = (environment: Effect.Effect<Option.Option<Environment>>) =>
   Effect.map(ChildProcessSpawner.ChildProcessSpawner, (spawner): Run =>
-    Effect.fnUntraced(function* (command, args, timeout) {
+    Effect.fnUntraced(function* (command, args, timeout, input) {
       const found = yield* environment
       if (Option.isNone(found))
         return yield* new CommandFailed({ command: [command, ...args].join(" "), problem: nobodyLoggedIn })
 
-      return yield* run(command, args, timeout, found.value).pipe(
+      return yield* run(command, args, timeout, found.value, input).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner)
       )
     })
@@ -138,6 +139,7 @@ export class Desktop extends Context.Service<
       question: string,
       destination: Option.Option<SecretDestination>
     ): Effect.Effect<Redacted.Redacted, CommandFailed>
+    copyText(text: string): Effect.Effect<void, CommandFailed>
   }
 >()("seat/platform/Desktop") {
   static readonly darwin = (commands: {
@@ -145,6 +147,7 @@ export class Desktop extends Context.Service<
     readonly handoff: string
     readonly osascript: string
     readonly secretPrompt: string
+    readonly pbcopy: string
   }) =>
     Layer.effect(
       Desktop,
@@ -189,7 +192,10 @@ export class Desktop extends Context.Service<
                 prompt(commands.secretPrompt, promptArgs(name, question, to), answerTimeout).pipe(
                   Effect.catchIf(fallsBack, () => askInDialog(name, question, destination))
                 )
-            }).pipe(Effect.map(answerIn), Effect.withSpan("Desktop.askSecret"))
+            }).pipe(Effect.map(answerIn), Effect.withSpan("Desktop.askSecret")),
+
+          copyText: (text) =>
+            launch(commands.pbcopy, [], launchTimeout, text).pipe(Effect.asVoid, Effect.withSpan("Desktop.copyText"))
         })
       })
     )
@@ -201,6 +207,7 @@ export class Desktop extends Context.Service<
     readonly gdbus: string
     readonly hyprctl: string
     readonly shell: string
+    readonly wlCopy: string
     readonly openerWindow: Duration.Duration
   }) =>
     Layer.effect(
@@ -247,7 +254,10 @@ export class Desktop extends Context.Service<
               commands.zenity,
               ["--entry", "--hide-text", `--title=sth-seat: ${name}`, `--text=${questionFor(question, destination)}`],
               answerTimeout
-            ).pipe(Effect.map(answerIn), Effect.withSpan("Desktop.askSecret"))
+            ).pipe(Effect.map(answerIn), Effect.withSpan("Desktop.askSecret")),
+
+          copyText: (text) =>
+            launch(commands.wlCopy, [], launchTimeout, text).pipe(Effect.asVoid, Effect.withSpan("Desktop.copyText"))
         })
       })
     )

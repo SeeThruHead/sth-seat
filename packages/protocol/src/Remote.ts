@@ -44,7 +44,14 @@ export const InputEnd = Schema.TaggedStruct("InputEnd", {})
 
 export const Cancel = Schema.TaggedStruct("Cancel", {})
 
-export const Request = Schema.Union([Run, Read, Write, Share, Tunnel, Input, InputEnd, Cancel])
+export const maxMessageLength = 65_536
+
+export const MessageText = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(maxMessageLength))
+export type MessageText = typeof MessageText.Type
+
+export const Message = Schema.TaggedStruct("Message", { text: MessageText })
+
+export const Request = Schema.Union([Run, Read, Write, Share, Tunnel, Input, InputEnd, Cancel, Message])
 export type Request = typeof Request.Type
 
 export const Envelope = Schema.Struct({

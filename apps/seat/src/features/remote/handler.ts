@@ -2,6 +2,7 @@ import { DateTime, Duration, Effect, FileSystem, HashMap, Match, Option, Path, R
 import type { Cause } from "effect"
 import { Signature } from "effect/crypto"
 import type { Seen } from "@sth-seat/protocol/Freshness.ts"
+import { Title } from "@sth-seat/protocol/Ids.ts"
 import type { MachineName } from "@sth-seat/protocol/Ids.ts"
 import { publicKeyOf } from "@sth-seat/protocol/Keys.ts"
 import { Envelope, Reply, chunksOf } from "@sth-seat/protocol/Remote.ts"
@@ -11,10 +12,12 @@ import type { Sealed } from "@sth-seat/protocol/Sealed.ts"
 import { Audit } from "../../domains/audit/Audit.ts"
 import { Me } from "../../domains/identity/Me.ts"
 import { Policies } from "../../domains/policy/Policies.ts"
-import { decide, expandHome, keyOf } from "../../domains/policy/Policy.ts"
+import { Messages } from "../../domains/messages/Messages.ts"
+import { acceptsMessagesFrom, copiesMessages, decide, expandHome, keyOf } from "../../domains/policy/Policy.ts"
 import type { Capability, PolicyFile } from "../../domains/policy/Policy.ts"
 import { problemOf } from "../../domains/problem/Problem.ts"
 import { Sessions } from "../../domains/sessions/Sessions.ts"
+import { Desktop } from "../../platform/Desktop.ts"
 import { Ports } from "../../platform/Ports.ts"
 import { Shell } from "../../platform/Shell.ts"
 import { admit, locked, unknownCaller } from "./Admission.ts"
@@ -102,6 +105,7 @@ const verified = Effect.fnUntraced(function* (claimed: Envelope, sealed: Sealed,
 
 type Acting = {
   readonly envelope: Envelope
+  readonly policy: PolicyFile
   readonly answer: Answer
   readonly settings: RemoteSettings
   readonly record: (action: string, target: string, result: string) => Effect.Effect<void>
@@ -117,6 +121,7 @@ const actingOn = Effect.fnUntraced(function* (checked: Checked, answer: Answer, 
 
   const acting: Acting = {
     envelope: checked.envelope,
+    policy: checked.policy,
     answer,
     settings,
     record,
@@ -227,6 +232,35 @@ const tunnelIn = Effect.fnUntraced(function* (acting: Acting, port: Port) {
   return yield* started(accepted, acting.answer)
 })
 
+const previewLength = 200
+
+const preview = (text: string): string => (text.length > previewLength ? `${text.slice(0, previewLength)}…` : text)
+
+const notTaken = (from: MachineName): string =>
+  `This machine's policy doesn't take messages from ${from} (messages: from in ~/.config/sth-seat/policy.yaml).`
+
+const shown = (effect: Effect.Effect<void, { readonly message: string }>, what: string) =>
+  effect.pipe(Effect.catchCause((cause) => Effect.logWarning(`can't ${what} for a message`, cause)))
+
+const deliver = Effect.fnUntraced(function* (acting: Acting, text: string) {
+  const messages = yield* Messages
+  const desktop = yield* Desktop
+  const { id, from } = acting.envelope
+  const bytes = new TextEncoder().encode(text).length
+  const target = `${bytes} bytes`
+  if (!acceptsMessagesFrom(acting.policy, from)) return yield* acting.refuse("message", target, notTaken(from))
+
+  const now = yield* DateTime.now
+  const stored = yield* messages.add({ id, from, at: DateTime.formatIso(now), text }).pipe(Effect.result)
+  if (Result.isFailure(stored)) return yield* acting.refuse("message", target, stored.failure.message)
+
+  yield* shown(desktop.notify(Title.make(`Message from ${from}`), preview(text)), "show a notification")
+  if (copiesMessages(acting.policy)) yield* shown(desktop.copyText(text), "copy the text")
+  yield* acting.record("message", target, "delivered")
+
+  yield* acting.answer({ _tag: "Finished", bytes })
+})
+
 const act = Effect.fnUntraced(function* (checked: Checked, answer: Answer, settings: RemoteSettings) {
   const sessions = yield* Sessions
   const acting = yield* actingOn(checked, answer, settings)
@@ -237,6 +271,7 @@ const act = Effect.fnUntraced(function* (checked: Checked, answer: Answer, setti
     Read: (request) => transfer(acting, "read", request.path),
     Write: (request) => transfer(acting, "write", request.path),
     Tunnel: (request) => tunnelIn(acting, request.port),
+    Message: (request) => deliver(acting, request.text),
     Input: (request) => Effect.asVoid(sessions.feed(session, from, request.bytes)),
     InputEnd: () => Effect.asVoid(sessions.endInput(session, from)),
     Cancel: () => Effect.asVoid(sessions.stop(session, Option.some(from))),

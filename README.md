@@ -18,6 +18,9 @@ sth-seat fixes both:
 - Machines **run commands and copy files on each other** (`sth-seat run`, `sth-seat cp`) instead of using ssh.
   Each command is signed by the sending machine and allowed only by the receiving machine's own policy, so a
   laptop can accept pages and files from your other machines without letting them run anything.
+- Machines **send each other messages** (`sth-seat send`, `sth-seat inbox`): requests for the agent or person on
+  the other machine, never commands. A machine whose policy takes messages but allows no shell can still be asked
+  for things.
 
 It runs on macOS and Linux (Wayland compositors such as Hyprland). Windows is not supported.
 
@@ -109,6 +112,19 @@ printf %s "$token" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -
    from the hub). Anything not listed is refused. With no policy file, only the hub may deliver things. A machine
    that should only receive, such as a work laptop, lists just `- from: [hub]` with `can: [receive]`.
 
+   `messages` (a top-level key next to `allow`) says which machines may send this one messages, separately from
+   what they may run:
+
+   ```yaml
+   messages:
+     from: [desktop]       # or ["*"] for every machine listed under machines
+     clipboard: true       # also put each message on the clipboard, ready to paste
+   ```
+
+   A message lands in this machine's inbox (`~/.local/state/sth-seat/messages.jsonl`, mode 600) and shows a
+   notification; `sth-seat inbox` lists the unread ones and marks them read. The daemon never runs anything from a
+   message. Without `messages`, none are taken.
+
    `secrets: here` (a top-level key next to `allow`) keeps this machine's secrets on it: `sth-seat ask-secret`
    asks on this machine's own screen and stores the answer here without contacting the hub, and the daemon
    refuses any secret the hub tries to store here. Set it on a machine whose secrets must never reach the others
@@ -162,12 +178,14 @@ sth-seat notify "The release build passed." --title "Build"
 sth-seat ask-secret api-token "API token for the staging deploy?"
 sth-seat run desktop -- make test             # like ssh, if desktop's policy allows shell
 sth-seat cp desktop:~/logs/app.log .
+sth-seat send laptop "Can you check the build log there?"   # into laptop's inbox, if it takes messages from here
+sth-seat inbox --wait                         # messages sent here; waits for the next one
 sth-seat log                                  # what other machines did here
 sth-seat lock                                 # refuse everything until `sth-seat unlock`
 sth-seat doctor
 ```
 
-`where`, `open`, `notify`, `ask-secret`, `cp`, `log` and `doctor` take `--json`. Exit codes: 0 done; 1 sth-seat
+`where`, `open`, `notify`, `ask-secret`, `cp`, `send`, `inbox`, `log` and `doctor` take `--json`. Exit codes: 0 done; 1 sth-seat
 couldn't do it (the message says why); for `run`, the remote command's own code, 124 when it timed out, 127 when
 the shell couldn't start; 255 when the other machine refused.
 

@@ -19,8 +19,12 @@ const describe = (command: string, args: ReadonlyArray<string>): string => [comm
 
 export type Environment = Readonly<Record<string, string>>
 
-const child = (name: string, args: ReadonlyArray<string>, env: Environment) =>
-  ChildProcess.make(name, [...args], { env: { ...env }, extendEnv: true })
+const child = (name: string, args: ReadonlyArray<string>, env: Environment, input?: string) =>
+  ChildProcess.make(name, [...args], {
+    env: { ...env },
+    extendEnv: true,
+    ...(input === undefined ? {} : { stdin: { stream: Stream.make(new TextEncoder().encode(input)), endOnDone: true } })
+  })
 
 const outputOf = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
   Stream.mkString(Stream.decodeText(stream))
@@ -29,7 +33,8 @@ export const run = Effect.fn("Processes.run")(function* (
   command: string,
   args: ReadonlyArray<string>,
   timeout: Duration.Input,
-  env: Environment = {}
+  env: Environment = {},
+  input?: string
 ) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
   const name = describe(command, args)
@@ -39,7 +44,7 @@ export const run = Effect.fn("Processes.run")(function* (
 
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      const handle = yield* spawner.spawn(child(command, args, env))
+      const handle = yield* spawner.spawn(child(command, args, env, input))
       const [stdout, stderr, exitCode] = yield* Effect.all(
         [outputOf(handle.stdout), outputOf(handle.stderr), handle.exitCode],
         { concurrency: "unbounded" }

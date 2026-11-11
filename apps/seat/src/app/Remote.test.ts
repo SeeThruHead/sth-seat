@@ -9,13 +9,14 @@ import { RemotePath, Reply, isLast } from "@sth-seat/protocol/Remote.ts"
 import { peek } from "@sth-seat/protocol/Sealed.ts"
 import type { Sealed } from "@sth-seat/protocol/Sealed.ts"
 import { Me } from "../domains/identity/Me.ts"
+import { Messages } from "../domains/messages/Messages.ts"
 import { Policies } from "../domains/policy/Policies.ts"
 import { Sessions } from "../domains/sessions/Sessions.ts"
 import { freshSeen, relayed } from "../features/remote/handler.ts"
 import { Ports } from "../platform/Ports.ts"
 import { Shell } from "../platform/Shell.ts"
-import { machineIn, writePolicy } from "../testing/Seat.testing.ts"
-import { download, linkTo, outcomeOf, runOn, upload } from "./Remote.ts"
+import { machineIn, recordingDesktop, writePolicy } from "../testing/Seat.testing.ts"
+import { download, linkTo, outcomeOf, runOn, sendMessage, upload } from "./Remote.ts"
 
 const cube = MachineName.make("cube")
 
@@ -47,7 +48,8 @@ const macSide = (machines: Machines) =>
     Layer.succeed(Me, Me.of({ name: cube, key: machines.mac.privateKey, publicKey: machines.mac.publicKey })),
     Shell.layer("/bin/sh"),
     Ports.layer,
-    Sessions.layer
+    Sessions.layer,
+    recordingDesktop
   )
 
 const fakeHub = (machines: Machines) =>
@@ -223,5 +225,36 @@ describe("sth-seat cp", () => {
 
       assert.strictEqual(refused.message, "no")
     })
+  )
+})
+
+describe("sth-seat send", () => {
+  it.live("puts a message in the other machine's inbox once its policy takes messages from this one", () =>
+    fromDev(
+      Effect.fnUntraced(function* (machines) {
+        const hub = yield* hubClient
+        const refused = yield* linkTo(hub, devIdentity(machines), cube).pipe(
+          Effect.flatMap((link) => sendMessage(link, "hello")),
+          Effect.flip
+        )
+        yield* writePolicy(
+          `${machines.root}/mac`,
+          `machines:\n  tower: ${machines.devText}\nmessages:\n  from: [tower]\n`
+        )
+        const bytes = yield* linkTo(hub, devIdentity(machines), cube).pipe(
+          Effect.flatMap((link) => sendMessage(link, "hello"))
+        )
+        const inbox = yield* Messages.use((messages) => messages.unread).pipe(
+          Effect.provide(Messages.layer(`${machines.root}/mac/state`))
+        )
+
+        assert.include(refused.message, "doesn't take messages from tower")
+        assert.strictEqual(bytes, 5)
+        assert.deepStrictEqual(
+          inbox.map((message) => [message.from, message.text]),
+          [[tower, "hello"]]
+        )
+      })
+    )
   )
 })

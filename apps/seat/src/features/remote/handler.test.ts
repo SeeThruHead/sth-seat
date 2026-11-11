@@ -9,10 +9,11 @@ import type { Event, Request } from "@sth-seat/protocol/Remote.ts"
 import { peek, seal } from "@sth-seat/protocol/Sealed.ts"
 import type { Sealed } from "@sth-seat/protocol/Sealed.ts"
 import { Audit } from "../../domains/audit/Audit.ts"
+import { Messages } from "../../domains/messages/Messages.ts"
 import { Sessions } from "../../domains/sessions/Sessions.ts"
 import { Ports } from "../../platform/Ports.ts"
 import { Shell } from "../../platform/Shell.ts"
-import { machineIn, testMe, writePolicy } from "../../testing/Seat.testing.ts"
+import { Opened, machineIn, recordingDesktop, testMe, writePolicy } from "../../testing/Seat.testing.ts"
 import { aborted, freshSeen, relayed } from "./handler.ts"
 
 const cube = MachineName.make("cube")
@@ -84,7 +85,7 @@ const setUp = Effect.gen(function* () {
 })
 
 const layer = (folder: string) =>
-  Layer.mergeAll(machineIn(folder), testMe(cube), Shell.layer("/bin/sh"), Ports.layer, Sessions.layer)
+  Layer.mergeAll(machineIn(folder), testMe(cube), Shell.layer("/bin/sh"), Ports.layer, Sessions.layer, recordingDesktop)
 
 const machine = <A, E, R>(test: (setup: Effect.Success<typeof setUp>) => Effect.Effect<A, E, R>) =>
   onMac((setup) => test(setup).pipe(Effect.provide(layer(setup.folder)))).pipe(
@@ -148,6 +149,66 @@ describe("relayed commands", () => {
           "~/nothing doesn't exist on this machine.",
           "The command was already run once."
         ])
+      })
+    )
+  )
+
+  it.live("take a message from a machine the policy names: into the inbox, a notification, the clipboard", () =>
+    machine(
+      Effect.fnUntraced(function* (setup) {
+        const audit = yield* Audit
+        const messages = yield* Messages
+        const opened = yield* Opened
+        yield* setup.policy("messages:\n  from: [tower]\n  clipboard: true\n")
+        const body = "Please rerun the staging deploy and tell me how it went."
+        yield* envelope({ key: setup.devKey }, { _tag: "Message", text: body }).pipe(Effect.flatMap(setup.deliver))
+        const replies = yield* setup.waitForEnd
+        const inbox = yield* messages.unread
+        const shown = yield* opened.all
+        const logged = yield* audit.recent(1)
+
+        assert.deepStrictEqual(
+          replies.map((one) => one.event),
+          [{ _tag: "Finished", bytes: 56 }]
+        )
+        assert.deepStrictEqual(
+          inbox.map((message) => [message.from, message.text]),
+          [[tower, body]]
+        )
+        assert.deepStrictEqual(shown, [`notify Message from tower: ${body}`, `copy ${body}`])
+        assert.deepStrictEqual(
+          logged.map((entry) => [entry.action, entry.target, entry.result]),
+          [["message", "56 bytes", "delivered"]]
+        )
+      })
+    )
+  )
+
+  it.live("refuse a message from a machine the policy doesn't take messages from, even one allowed a shell", () =>
+    machine(
+      Effect.fnUntraced(function* (setup) {
+        const messages = yield* Messages
+        const opened = yield* Opened
+        yield* setup.policy("allow:\n  - from: [tower]\n    can: [shell]\nmessages:\n  from: [laptop]\n")
+        yield* envelope({ key: setup.devKey }, { _tag: "Message", text: "rm -rf ~" }).pipe(
+          Effect.flatMap(setup.deliver)
+        )
+        const replies = yield* setup.waitForEnd
+        const inbox = yield* messages.all
+        const shown = yield* opened.all
+
+        assert.deepStrictEqual(
+          replies.map((one) => one.event),
+          [
+            {
+              _tag: "Denied",
+              reason:
+                "This machine's policy doesn't take messages from tower (messages: from in ~/.config/sth-seat/policy.yaml)."
+            }
+          ]
+        )
+        assert.deepStrictEqual(inbox, [])
+        assert.deepStrictEqual(shown, [])
       })
     )
   )

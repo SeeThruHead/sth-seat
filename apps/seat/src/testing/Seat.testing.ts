@@ -4,6 +4,7 @@ import { newKeyPair } from "@sth-seat/protocol/Keys.ts"
 import { Audit } from "../domains/audit/Audit.ts"
 import { Files } from "../domains/files/Files.ts"
 import { Me } from "../domains/identity/Me.ts"
+import { Messages } from "../domains/messages/Messages.ts"
 import { Policies } from "../domains/policy/Policies.ts"
 import { TunnelFailed, Tunnels } from "../domains/tunnels/Tunnels.ts"
 import { Desktop } from "../platform/Desktop.ts"
@@ -38,7 +39,10 @@ export const recordingDesktop = Layer.effectContext(
         revealFile: (path) => record(`reveal ${path}`),
         notify: (title, message) => record(`notify ${title}: ${message}`),
         askSecret: (name, question, destination) =>
-          record(`ask ${name}: ${question}${goingTo(destination)}`).pipe(Effect.as(Redacted.make(`answer for ${name}`)))
+          record(`ask ${name}: ${question}${goingTo(destination)}`).pipe(
+            Effect.as(Redacted.make(`answer for ${name}`))
+          ),
+        copyText: (text) => record(`copy ${text}`)
       })
     ).pipe(Context.add(Opened, Opened.of({ all: Ref.get(opened) })))
   })
@@ -70,5 +74,6 @@ export const machineIn = (folder: string) =>
     Files.layer(`${folder}/inbox`, `${folder}/secrets`),
     Policies.layer(`${folder}/policy.yaml`),
     Audit.layer(`${folder}/state`),
+    Messages.layer(`${folder}/state`),
     noTunnels
   )

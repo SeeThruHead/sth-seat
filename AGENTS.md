@@ -4,7 +4,7 @@ Makes all of a person's machines act like the one they are sitting at. A hub kno
 keyboard or mouse input; the machine with the most recent input is the seat. Coding agents call the hub's MCP
 tools (`open_for_user`, `where_is_user`, `notify_user`, `ask_user_secret`), and a small daemon on every machine
 opens what the hub sends. Machines also run commands and copy files on each other (`sth-seat run`,
-`sth-seat cp`) in place of ssh, signed with each machine's key and allowed only by the target's own policy.
+`sth-seat cp`) in place of ssh, and send each other messages (`sth-seat send`, `sth-seat inbox`), signed with each machine's key and allowed only by the target's own policy.
 Read `README.md` for what it is and how to set it up, and `docs/architecture.md` for the decisions.
 
 | Path | What |
@@ -12,7 +12,7 @@ Read `README.md` for what it is and how to set it up, and `docs/architecture.md`
 | `packages/protocol` | what hub and daemons agree on: ids (`Ids.ts`), one contract per user action (`Actions.ts`) from which `Action.ts` builds both its RPC and its MCP tool, the daemon RPC (`Daemon.ts`), machine keys (`Keys.ts`), signed messages (`Sealed.ts`, `Hello.ts`, `Freshness.ts`) and the commands machines send each other (`Remote.ts`) |
 | `packages/lint` | the house lint rules (an oxlint JS plugin, tested with fixtures), the coverage reporter and the commit-msg attribution check |
 | `apps/hub` | the server: presence, links to daemons, the open/where/notify/secret handlers, relaying signed commands between machines, MCP at `/mcp`, daemon socket at `/daemon` |
-| `apps/seat` | one bundle for every machine: `sth-seat daemon`, `open`, `where`, `notify`, `ask-secret`, `run`, `cp`, `key`, `lock`, `unlock`, `log`, `doctor`, `skill`; commands live in `src/app/cli/`, one module per group, and the skill text agents read is `src/domains/skill/Skill.ts` (a test keeps it naming every command) |
+| `apps/seat` | one bundle for every machine: `sth-seat daemon`, `open`, `where`, `notify`, `ask-secret`, `run`, `cp`, `send`, `inbox`, `key`, `lock`, `unlock`, `log`, `doctor`, `skill`; commands live in `src/app/cli/`, one module per group, and the skill text agents read is `src/domains/skill/Skill.ts` (a test keeps it naming every command) |
 
 ## Commands
 

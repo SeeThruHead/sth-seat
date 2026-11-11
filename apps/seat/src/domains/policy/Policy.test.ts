@@ -1,7 +1,17 @@
 import { assert, describe, it } from "@effect/vitest"
 import { Option, Result, Schema } from "effect"
 import { MachineName } from "@sth-seat/protocol/Ids.ts"
-import { PolicyFile, decide, defaultPolicy, expandHome, hub, keyOf } from "./Policy.ts"
+import {
+  PolicyFile,
+  acceptsMessagesFrom,
+  copiesMessages,
+  decide,
+  defaultPolicy,
+  expandHome,
+  hub,
+  keepsSecrets,
+  keyOf
+} from "./Policy.ts"
 import type { Ask, Capability, Caller } from "./Policy.ts"
 
 const home = "/home/user"
@@ -96,6 +106,31 @@ describe("policy", () => {
   it("knows the pinned key of each machine it lists", () => {
     assert.deepStrictEqual(keyOf(personal, tower), Option.some("a".repeat(43)))
     assert.deepStrictEqual(keyOf(personal, cube), Option.none())
+  })
+
+  it("takes messages only from the machines it names (or any with *), apart from what they may run", () => {
+    const named = Schema.decodeSync(PolicyFile)({ messages: { from: ["tower"], clipboard: true } })
+    const anyone = Schema.decodeSync(PolicyFile)({ messages: { from: ["*"] } })
+
+    assert.deepStrictEqual(
+      [named, anyone, personal].map((policy) => [
+        acceptsMessagesFrom(policy, tower),
+        acceptsMessagesFrom(policy, cube),
+        copiesMessages(policy)
+      ]),
+      [
+        [true, false, true],
+        [true, true, false],
+        [false, false, false]
+      ]
+    )
+  })
+
+  it("keeps secrets here only when it says secrets: here", () => {
+    const here = Schema.decodeSync(PolicyFile)({ secrets: "here" })
+    const seat = Schema.decodeSync(PolicyFile)({ secrets: "seat" })
+
+    assert.deepStrictEqual([here, seat, personal].map(keepsSecrets), [true, false, false])
   })
 
   it("expands ~ to the home folder", () => {

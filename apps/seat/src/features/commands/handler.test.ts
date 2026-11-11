@@ -63,7 +63,8 @@ const desktopThat = (openUrl: Desktop["Service"]["openUrl"]) =>
       openFile: () => Effect.void,
       revealFile: () => Effect.void,
       notify: () => Effect.void,
-      askSecret: () => Effect.fail(new CommandFailed({ command: "zenity", problem: "exit code 1" }))
+      askSecret: () => Effect.fail(new CommandFailed({ command: "zenity", problem: "exit code 1" })),
+      copyText: () => Effect.void
     })
   )
 

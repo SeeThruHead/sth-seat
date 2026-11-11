@@ -88,6 +88,28 @@ describe("relay", () => {
     )
   )
 
+  it.effect("carries a message to its target like any other session and ends at the target's Finished", () =>
+    withKeys(
+      Effect.fnUntraced(function* (keys) {
+        const daemon = yield* recordingDaemon(cube)
+        const sealed = yield* command(keys.devKey, { _tag: "Message", text: "Can you rerun the deploy?" })
+        const replies = yield* relay(tower, sealed)
+        const collected = yield* replies.pipe(Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+        const finished = yield* answer(keys.macKey, 0, { _tag: "Finished", bytes: 25 })
+        yield* reply(cube, finished)
+        const received = yield* Fiber.join(collected)
+        const events = yield* Effect.forEach(received, (one) => peek(Reply, "reply", one))
+        const commands = yield* daemon.seen
+
+        assert.deepStrictEqual(tagsOf(commands), ["Relayed"])
+        assert.deepStrictEqual(
+          events.map((one) => one.event),
+          [{ _tag: "Finished", bytes: 25 }]
+        )
+      })
+    )
+  )
+
   it.effect("passes input on to a running session and aborts the session when the caller goes away", () =>
     withKeys(
       Effect.fnUntraced(function* (keys) {
@@ -124,7 +146,7 @@ describe("relay", () => {
 
         assert.include(reasons[0], "The command from tower isn't sealed by it")
         assert.strictEqual(reasons[1], "tower can't send commands as cube.")
-        assert.strictEqual(reasons[2], "A session starts with Run, Read, Write or Tunnel, not Cancel.")
+        assert.strictEqual(reasons[2], "A session starts with Run, Read, Write, Tunnel or Message, not Cancel.")
       })
     )
   )

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+
+- `sth-seat send <machine> <text>` (or the text on stdin) puts a message in another machine's inbox, and
+  `sth-seat inbox` lists the unread ones (sender, time, text) and marks them read; `--json` for agents, `--wait`
+  for the next one, `--all` for read ones too. A message is a request, never a command: the daemon stores it,
+  shows a notification and, with `messages: clipboard: true`, copies it to the clipboard. Which machines may send
+  is the policy's `messages: from: [...]`, separate from `allow`, so a machine with no shell can still take
+  messages. The hub relays the new `Message` request, so it must be on 0.6.0 too.
+
 ## 0.5.0
 
 - `secrets: here` keeps a machine's secrets on it. In its `policy.yaml`, `sth-seat ask-secret` asks on that machine

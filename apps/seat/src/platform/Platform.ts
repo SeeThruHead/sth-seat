@@ -18,7 +18,13 @@ export class UnsupportedPlatform extends Schema.TaggedError<UnsupportedPlatform,
 
 export type PlatformSettings = SessionSettings & { readonly os: string; readonly handoff: string }
 
-const darwinTools = { open: "open", ioreg: "ioreg", osascript: "osascript", secretPrompt: "herdr-secret" }
+const darwinTools = {
+  open: "open",
+  ioreg: "ioreg",
+  osascript: "osascript",
+  secretPrompt: "herdr-secret",
+  pbcopy: "pbcopy"
+}
 
 const linuxTools = {
   open: "xdg-open",
@@ -27,7 +33,8 @@ const linuxTools = {
   zenity: "zenity",
   gdbus: "gdbus",
   hyprctl: "hyprctl",
-  shell: "/bin/sh"
+  shell: "/bin/sh",
+  wlCopy: "wl-copy"
 }
 
 type PlatformLayer = Layer.Layer<Desktop | Idle, never, ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem>
@@ -38,7 +45,8 @@ const layers = (settings: PlatformSettings): Readonly<Record<string, PlatformLay
       open: darwinTools.open,
       handoff: settings.handoff,
       osascript: darwinTools.osascript,
-      secretPrompt: darwinTools.secretPrompt
+      secretPrompt: darwinTools.secretPrompt,
+      pbcopy: darwinTools.pbcopy
     }),
     Idle.darwin(darwinTools.ioreg)
   ),
@@ -50,6 +58,7 @@ const layers = (settings: PlatformSettings): Readonly<Record<string, PlatformLay
       gdbus: linuxTools.gdbus,
       hyprctl: linuxTools.hyprctl,
       shell: linuxTools.shell,
+      wlCopy: linuxTools.wlCopy,
       openerWindow
     }),
     Idle.wayland(linuxTools.swayidle)

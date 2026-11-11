@@ -15,7 +15,7 @@ import {
   chunksOf,
   maxChunkBytes
 } from "@sth-seat/protocol/Remote.ts"
-import type { Event, Request } from "@sth-seat/protocol/Remote.ts"
+import type { Event, MessageText, Request } from "@sth-seat/protocol/Remote.ts"
 import { seal, unseal } from "@sth-seat/protocol/Sealed.ts"
 import type { Sealed } from "@sth-seat/protocol/Sealed.ts"
 import { Policies } from "../domains/policy/Policies.ts"
@@ -221,6 +221,15 @@ export const upload = Effect.fn("Remote.upload")(function* (link: Link, local: s
   )
   const bytes = yield* Ref.get(finished)
   if (Option.isNone(bytes)) return yield* problem(`${link.target} stopped before the whole file was written.`)
+
+  return bytes.value
+})
+
+export const sendMessage = Effect.fn("Remote.sendMessage")(function* (link: Link, text: MessageText) {
+  const finished = yield* Ref.make(Option.none<number>())
+  yield* start(link, { _tag: "Message", text }).pipe(Stream.runForEach(remember(finished)))
+  const bytes = yield* Ref.get(finished)
+  if (Option.isNone(bytes)) return yield* problem(`${link.target} stopped before it took the message.`)
 
   return bytes.value
 })

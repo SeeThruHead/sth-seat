@@ -28,15 +28,50 @@ const onLinux = (folder: string, open: string, gdbus: string, hyprctl = `${folde
     gdbus,
     hyprctl,
     shell: "/bin/sh",
+    wlCopy: "/bin/true",
     openerWindow: Duration.millis(300)
   }).pipe(Layer.provide(sessionIn(folder)))
 
 const askOnMac = (secretPrompt: string, osascript: string, destination: typeof toTower) =>
   Desktop.use((desktop) => desktop.askSecret(name, "Plex token?", destination)).pipe(
-    Effect.provide(Desktop.darwin({ open: osascript, handoff: osascript, osascript, secretPrompt }))
+    Effect.provide(
+      Desktop.darwin({ open: osascript, handoff: osascript, osascript, secretPrompt, pbcopy: "/bin/true" })
+    )
   )
 
 describe("Desktop", () => {
+  it.live("puts text on the clipboard through the platform's copy tool, on stdin", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const folder = yield* fs.makeTempDirectoryScoped()
+      yield* fs.writeFileString(`${folder}/wayland-1`, "")
+      const copy = yield* script(folder, "copy", `cat >> ${folder}/log; echo " <- $0" >> ${folder}/log`)
+      const missing = `${folder}/missing`
+      const mac = Desktop.darwin({
+        open: missing,
+        handoff: missing,
+        osascript: missing,
+        secretPrompt: missing,
+        pbcopy: copy
+      })
+      const linux = Desktop.linux({
+        open: missing,
+        notifySend: missing,
+        zenity: missing,
+        gdbus: missing,
+        hyprctl: missing,
+        shell: "/bin/sh",
+        wlCopy: copy,
+        openerWindow: Duration.millis(300)
+      }).pipe(Layer.provide(sessionIn(folder)))
+      yield* Desktop.use((desktop) => desktop.copyText("from the Mac")).pipe(Effect.provide(mac))
+      yield* Desktop.use((desktop) => desktop.copyText("from Linux")).pipe(Effect.provide(linux))
+      const log = yield* logged(folder)
+
+      assert.strictEqual(log, `from the Mac <- ${copy}\nfrom Linux <- ${copy}\n`)
+    }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
+  )
+
   it.live("on macOS opens URLs with open and hands files to Handoff with their title", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
@@ -50,7 +85,11 @@ describe("Desktop", () => {
         yield* desktop.openFile("/tmp/a.html", Option.some(Title.make("Report")))
         yield* desktop.openFile("/tmp/b.html", Option.none())
         yield* desktop.notify(Title.make("Done"), 'It "passed"')
-      }).pipe(Effect.provide(Desktop.darwin({ open, handoff, osascript, secretPrompt: `${folder}/missing` })))
+      }).pipe(
+        Effect.provide(
+          Desktop.darwin({ open, handoff, osascript, secretPrompt: `${folder}/missing`, pbcopy: "/bin/true" })
+        )
+      )
       const log = yield* logged(folder)
 
       assert.strictEqual(
@@ -80,6 +119,7 @@ describe("Desktop", () => {
             gdbus: open,
             hyprctl: `${folder}/missing`,
             shell: "/bin/sh",
+            wlCopy: "/bin/true",
             openerWindow: Duration.millis(300)
           }).pipe(Layer.provide(sessionIn(folder)))
         )
@@ -108,6 +148,7 @@ describe("Desktop", () => {
               gdbus: open,
               hyprctl: `${folder}/missing`,
               shell: "/bin/sh",
+              wlCopy: "/bin/true",
               openerWindow: Duration.millis(300)
             }).pipe(Layer.provide(sessionIn(folder)))
           )
@@ -123,6 +164,7 @@ describe("Desktop", () => {
               gdbus: open,
               hyprctl: `${folder}/missing`,
               shell: "/bin/sh",
+              wlCopy: "/bin/true",
               openerWindow: Duration.millis(300)
             }).pipe(Layer.provide(DesktopSession.wayland({ runtimeDir: Option.none(), waylandDisplay: Option.none() })))
           )
@@ -139,6 +181,7 @@ describe("Desktop", () => {
               gdbus: open,
               hyprctl: `${folder}/missing`,
               shell: "/bin/sh",
+              wlCopy: "/bin/true",
               openerWindow: Duration.millis(300)
             }).pipe(Layer.provide(sessionIn(`${folder}/missing`)))
           )
@@ -162,7 +205,9 @@ describe("Desktop", () => {
         const open = yield* script(folder, "open", `echo "open $*" >> ${folder}/log`)
         const gdbus = yield* script(folder, "gdbus", `echo "gdbus $*" >> ${folder}/log`)
         yield* Desktop.use((desktop) => desktop.revealFile("/inbox/app.dmg")).pipe(
-          Effect.provide(Desktop.darwin({ open, handoff: open, osascript: open, secretPrompt: open }))
+          Effect.provide(
+            Desktop.darwin({ open, handoff: open, osascript: open, secretPrompt: open, pbcopy: "/bin/true" })
+          )
         )
         yield* Desktop.use((desktop) => desktop.revealFile("/inbox/Bob's report #1.pdf")).pipe(
           Effect.provide(onLinux(folder, open, gdbus))
@@ -306,6 +351,7 @@ describe("Desktop", () => {
             gdbus: zenity,
             hyprctl: `${folder}/missing`,
             shell: "/bin/sh",
+            wlCopy: "/bin/true",
             openerWindow: Duration.millis(300)
           }).pipe(Layer.provide(sessionIn(folder)))
         )
@@ -339,6 +385,7 @@ describe("Desktop", () => {
           gdbus: open,
           hyprctl: `${folder}/missing`,
           shell: "/bin/sh",
+          wlCopy: "/bin/true",
           openerWindow: Duration.millis(300)
         }).pipe(Layer.provide(sessionIn(folder)))
       yield* Desktop.use((desktop) => desktop.openUrl(url)).pipe(Effect.provide(layerWith(lingering)))

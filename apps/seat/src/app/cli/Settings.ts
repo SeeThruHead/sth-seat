@@ -1,6 +1,7 @@
 import { Config, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import { secretsFolder } from "@sth-seat/protocol/Daemon.ts"
 import { Audit } from "../../domains/audit/Audit.ts"
+import { Messages } from "../../domains/messages/Messages.ts"
 import { Policies } from "../../domains/policy/Policies.ts"
 
 const SeatConfig = Config.all({
@@ -68,4 +69,4 @@ export const withHub = Effect.gen(function* () {
 })
 
 export const machineLayers = (found: Pick<Settings, "policyFile" | "stateDir">) =>
-  Layer.mergeAll(Policies.layer(found.policyFile), Audit.layer(found.stateDir))
+  Layer.mergeAll(Policies.layer(found.policyFile), Audit.layer(found.stateDir), Messages.layer(found.stateDir))

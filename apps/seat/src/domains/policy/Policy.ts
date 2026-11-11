@@ -17,10 +17,16 @@ const Rule = Schema.Struct({
 })
 export type Rule = typeof Rule.Type
 
+const Messages = Schema.Struct({
+  from: Schema.Array(Schema.Union([MachineName, Schema.Literal("*")])),
+  clipboard: Schema.optionalKey(Schema.Boolean)
+})
+
 export const PolicyFile = Schema.Struct({
   machines: Schema.Record(MachineName, PublicKeyText).pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
   allow: Schema.Array(Rule).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
-  secrets: Schema.optionalKey(SecretsKept)
+  secrets: Schema.optionalKey(SecretsKept),
+  messages: Schema.optionalKey(Messages)
 })
 export type PolicyFile = typeof PolicyFile.Type
 
@@ -74,6 +80,11 @@ export const decide = (policy: PolicyFile, ask: Ask, home: string): Result.Resul
 }
 
 export const keepsSecrets = (policy: PolicyFile): boolean => policy.secrets === "here"
+
+export const acceptsMessagesFrom = (policy: PolicyFile, sender: MachineName): boolean =>
+  (policy.messages?.from ?? []).some((listed) => listed === sender || listed === "*")
+
+export const copiesMessages = (policy: PolicyFile): boolean => policy.messages?.clipboard === true
 
 export const keyOf = (policy: PolicyFile, machine: MachineName): Option.Option<PublicKeyText> =>
   Option.fromNullishOr(policy.machines[machine])
