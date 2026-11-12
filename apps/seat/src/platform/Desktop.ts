@@ -2,6 +2,7 @@ import { Context, Duration, Effect, Layer, Option, Redacted } from "effect"
 import { ChildProcessSpawner } from "effect/process"
 import type { SecretDestination } from "@sth-seat/protocol/Daemon.ts"
 import type { SecretName, Title, WebUrl } from "@sth-seat/protocol/Ids.ts"
+import { defaultBrowserIn, safari, webAddress } from "../domains/browser/Browser.ts"
 import { focusedFromHyprctl, isPlaying, readyToOpen } from "../domains/focus/Focus.ts"
 import { CommandFailed, run } from "./Processes.ts"
 import type { Environment } from "./Processes.ts"
@@ -58,9 +59,10 @@ const secretScript = [
 ]
 
 const detachedOpener = [
+  "ticks=$0",
   "said=$(mktemp)",
-  'setsid "$0" "$1" </dev/null >/dev/null 2>"$said" & opener=$!',
-  'for tick in $(seq "$2"); do kill -0 "$opener" 2>/dev/null || { wait "$opener"; code=$?; cat "$said" >&2; rm -f "$said"; exit $code; }; sleep 0.1; done',
+  'setsid "$@" </dev/null >/dev/null 2>"$said" & opener=$!',
+  'for tick in $(seq "$ticks"); do kill -0 "$opener" 2>/dev/null || { wait "$opener"; code=$?; cat "$said" >&2; rm -f "$said"; exit $code; }; sleep 0.1; done',
   'rm -f "$said"'
 ].join("; ")
 
@@ -68,16 +70,31 @@ export const openerWindow = Duration.seconds(3)
 
 const ticksIn = (window: Duration.Duration): string => String(Math.max(1, Math.round(Duration.toMillis(window) / 100)))
 
-const detached = (opener: string, target: string, window: Duration.Duration): ReadonlyArray<string> => [
+const detached = (window: Duration.Duration, opener: ReadonlyArray<string>): ReadonlyArray<string> => [
   "-c",
   detachedOpener,
-  opener,
-  target,
-  ticksIn(window)
+  ticksIn(window),
+  ...opener
 ]
 
-const asOpener = (opener: string, target: string) => (error: CommandFailed) =>
-  new CommandFailed({ command: `${opener} ${target}`, problem: error.problem })
+const asOpener = (opener: ReadonlyArray<string>) => (error: CommandFailed) =>
+  new CommandFailed({ command: opener.join(" "), problem: error.problem })
+
+const browsable = (url: string): Effect.Effect<string, CommandFailed> =>
+  Effect.fromResult(webAddress(url)).pipe(Effect.mapError((problem) => new CommandFailed({ command: "open", problem })))
+
+const browserQuery = ["query", "default", "x-scheme-handler/https"]
+
+const noBrowser = "no default browser is set; set one with `xdg-settings set default-web-browser <app>.desktop`."
+
+const launchServicesHandlers = (plist: string): ReadonlyArray<string> => [
+  "-extract",
+  "LSHandlers",
+  "json",
+  "-o",
+  "-",
+  plist
+]
 
 const fileUri = (path: string): string =>
   `file://${path.split("/").map(encodeURIComponent).join("/").replaceAll("'", "%27")}`
@@ -148,6 +165,8 @@ export class Desktop extends Context.Service<
     readonly osascript: string
     readonly secretPrompt: string
     readonly pbcopy: string
+    readonly plutil: string
+    readonly launchServices: string
   }) =>
     Layer.effect(
       Desktop,
@@ -162,9 +181,24 @@ export class Desktop extends Context.Service<
             answerTimeout
           )
 
+        const defaultBrowser = launch(
+          commands.plutil,
+          launchServicesHandlers(commands.launchServices),
+          launchTimeout
+        ).pipe(
+          Effect.map(defaultBrowserIn),
+          Effect.orElseSucceed(() => safari)
+        )
+
+        const inBrowser = Effect.fnUntraced(function* (url: WebUrl) {
+          const address = yield* browsable(url)
+          const browser = yield* defaultBrowser
+
+          yield* launch(commands.open, ["-b", browser, address], launchTimeout)
+        })
+
         return Desktop.of({
-          openUrl: (url) =>
-            launch(commands.open, [url], launchTimeout).pipe(Effect.asVoid, Effect.withSpan("Desktop.openUrl")),
+          openUrl: (url) => inBrowser(url).pipe(Effect.withSpan("Desktop.openUrl")),
 
           openFile: (path, title) =>
             launch(commands.handoff, [path, ...titleArgs(title)], launchTimeout).pipe(
@@ -208,6 +242,8 @@ export class Desktop extends Context.Service<
     readonly hyprctl: string
     readonly shell: string
     readonly wlCopy: string
+    readonly xdgMime: string
+    readonly launcher: string
     readonly openerWindow: Duration.Duration
   }) =>
     Layer.effect(
@@ -216,11 +252,24 @@ export class Desktop extends Context.Service<
         const session = yield* DesktopSession
         const launch = yield* runner(session.environment)
 
-        const opened = (target: string) =>
-          launch(commands.shell, detached(commands.open, target, commands.openerWindow), launchTimeout).pipe(
-            Effect.mapError(asOpener(commands.open, target)),
+        const started = (opener: ReadonlyArray<string>) =>
+          launch(commands.shell, detached(commands.openerWindow, opener), launchTimeout).pipe(
+            Effect.mapError(asOpener(opener)),
             Effect.asVoid
           )
+
+        const opened = (target: string) => started([commands.open, target])
+
+        const browserEntry = launch(commands.xdgMime, browserQuery, launchTimeout).pipe(
+          Effect.map((output) => output.trim()),
+          Effect.filterOrFail(
+            (entry) => entry !== "",
+            () => new CommandFailed({ command: [commands.xdgMime, ...browserQuery].join(" "), problem: noBrowser })
+          )
+        )
+
+        const browsed = (address: string) =>
+          Effect.flatMap(browserEntry, (entry) => started([commands.launcher, entry, address]))
 
         const notified = (title: string, message: string) =>
           launch(commands.notifySend, ["--app-name=sth-seat", "--", title, message], launchTimeout).pipe(Effect.asVoid)
@@ -233,8 +282,14 @@ export class Desktop extends Context.Service<
         const unlessPlaying = (target: string, show: Effect.Effect<void, CommandFailed>) =>
           Effect.flatMap(playing, (busy) => (busy ? notified("sth-seat", readyToOpen(target)) : show))
 
+        const inBrowser = Effect.fnUntraced(function* (url: WebUrl) {
+          const address = yield* browsable(url)
+
+          yield* unlessPlaying(address, browsed(address))
+        })
+
         return Desktop.of({
-          openUrl: (url) => unlessPlaying(url, opened(url)).pipe(Effect.withSpan("Desktop.openUrl")),
+          openUrl: (url) => inBrowser(url).pipe(Effect.withSpan("Desktop.openUrl")),
 
           openFile: (path) => unlessPlaying(path, opened(path)).pipe(Effect.withSpan("Desktop.openFile")),
 

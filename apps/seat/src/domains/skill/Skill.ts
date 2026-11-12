@@ -53,7 +53,7 @@ sth-seat open --reveal ./dist/app.dmg               # copied there and shown sel
 
 - Use this instead of \`open\`, \`xdg-open\` or printing a path: those show it on this machine, where the user may not be.
 - A localhost URL opens on the seat through a tunnel to this machine, so the server can stay on 127.0.0.1.
-- A file is copied to the seat and opened there (into Handoff on macOS). One file, up to 32 MB; make HTML self-contained.
+- A file is copied to the seat and opened there (into Handoff on macOS). One file, up to 32 MB; make HTML self-contained. Only documents open (HTML, PDF, images, text, office files, audio and video); anything that could run, an app or a script, is refused unless you pass \`--reveal\`.
 - Always pass \`--title\` for a file: a short description of what it is, not the file name.
 - Add \`--reveal\` when the user should find the file rather than read it (an installer, an archive, a folder of output): it lands in the seat's sth-seat inbox and is shown selected in Finder or the file manager instead of opened.
 

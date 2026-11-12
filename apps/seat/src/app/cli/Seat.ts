@@ -105,7 +105,7 @@ const askOnThisMachine = Effect.fnUntraced(function* (found: Settings, request: 
 
   return yield* askHere(request, me.name).pipe(
     Effect.provide([
-      platformLayer({ os: process.platform, handoff: found.handoff, ...found.session }),
+      platformLayer({ os: process.platform, handoff: found.handoff, home: found.home, ...found.session }),
       Files.layer(found.inbox, found.secrets)
     ])
   )

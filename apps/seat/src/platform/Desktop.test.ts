@@ -15,6 +15,8 @@ const logged = (folder: string) => FileSystem.FileSystem.use((fs) => fs.readFile
 
 const name = SecretName.make("plex-token")
 
+const browserEntry = (folder: string) => script(folder, "xdg-mime", "echo browser.desktop")
+
 const toTower = Option.some({
   machine: MachineLabel.make("Tower"),
   file: "~/.local/share/sth-seat/secrets/plex-token"
@@ -29,13 +31,23 @@ const onLinux = (folder: string, open: string, gdbus: string, hyprctl = `${folde
     hyprctl,
     shell: "/bin/sh",
     wlCopy: "/bin/true",
+    xdgMime: `${folder}/xdg-mime`,
+    launcher: open,
     openerWindow: Duration.millis(300)
   }).pipe(Layer.provide(sessionIn(folder)))
 
 const askOnMac = (secretPrompt: string, osascript: string, destination: typeof toTower) =>
   Desktop.use((desktop) => desktop.askSecret(name, "Plex token?", destination)).pipe(
     Effect.provide(
-      Desktop.darwin({ open: osascript, handoff: osascript, osascript, secretPrompt, pbcopy: "/bin/true" })
+      Desktop.darwin({
+        open: osascript,
+        handoff: osascript,
+        osascript,
+        secretPrompt,
+        pbcopy: "/bin/true",
+        plutil: "/nonexistent/plutil",
+        launchServices: "/nonexistent.plist"
+      })
     )
   )
 
@@ -52,7 +64,9 @@ describe("Desktop", () => {
         handoff: missing,
         osascript: missing,
         secretPrompt: missing,
-        pbcopy: copy
+        pbcopy: copy,
+        plutil: missing,
+        launchServices: missing
       })
       const linux = Desktop.linux({
         open: missing,
@@ -62,6 +76,8 @@ describe("Desktop", () => {
         hyprctl: missing,
         shell: "/bin/sh",
         wlCopy: copy,
+        xdgMime: missing,
+        launcher: missing,
         openerWindow: Duration.millis(300)
       }).pipe(Layer.provide(sessionIn(folder)))
       yield* Desktop.use((desktop) => desktop.copyText("from the Mac")).pipe(Effect.provide(mac))
@@ -72,38 +88,54 @@ describe("Desktop", () => {
     }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
   )
 
-  it.live("on macOS opens URLs with open and hands files to Handoff with their title", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem
-      const folder = yield* fs.makeTempDirectoryScoped()
-      const open = yield* script(folder, "open", `echo "open $*" >> ${folder}/log`)
-      const handoff = yield* script(folder, "handoff", `echo "handoff $*" >> ${folder}/log`)
-      const osascript = yield* script(folder, "osascript", `echo "osascript $*" >> ${folder}/log`)
-      yield* Effect.gen(function* () {
-        const desktop = yield* Desktop
-        yield* desktop.openUrl(url)
-        yield* desktop.openFile("/tmp/a.html", Option.some(Title.make("Report")))
-        yield* desktop.openFile("/tmp/b.html", Option.none())
-        yield* desktop.notify(Title.make("Done"), 'It "passed"')
-      }).pipe(
-        Effect.provide(
-          Desktop.darwin({ open, handoff, osascript, secretPrompt: `${folder}/missing`, pbcopy: "/bin/true" })
+  it.live(
+    "on macOS opens URLs in the default browser by its bundle id and hands files to Handoff with their title",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem
+        const folder = yield* fs.makeTempDirectoryScoped()
+        const open = yield* script(folder, "open", `echo "open $*" >> ${folder}/log`)
+        const plutil = yield* script(
+          folder,
+          "plutil",
+          `[ "$6" = "${folder}/ls.plist" ] && echo '[{"LSHandlerURLScheme":"https","LSHandlerRoleAll":"com.google.chrome"}]'`
         )
-      )
-      const log = yield* logged(folder)
+        const handoff = yield* script(folder, "handoff", `echo "handoff $*" >> ${folder}/log`)
+        const osascript = yield* script(folder, "osascript", `echo "osascript $*" >> ${folder}/log`)
+        yield* Effect.gen(function* () {
+          const desktop = yield* Desktop
+          yield* desktop.openUrl(url)
+          yield* desktop.openFile("/tmp/a.html", Option.some(Title.make("Report")))
+          yield* desktop.openFile("/tmp/b.html", Option.none())
+          yield* desktop.notify(Title.make("Done"), 'It "passed"')
+        }).pipe(
+          Effect.provide(
+            Desktop.darwin({
+              open,
+              handoff,
+              osascript,
+              secretPrompt: `${folder}/missing`,
+              pbcopy: "/bin/true",
+              plutil,
+              launchServices: `${folder}/ls.plist`
+            })
+          )
+        )
+        const log = yield* logged(folder)
 
-      assert.strictEqual(
-        log,
-        'open https://example.com/\nhandoff /tmp/a.html --title Report\nhandoff /tmp/b.html\nosascript -e on run argv -e display notification (item 2 of argv) with title (item 1 of argv) -e end run Done It "passed"\n'
-      )
-    }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
+        assert.strictEqual(
+          log,
+          'open -b com.google.chrome https://example.com/\nhandoff /tmp/a.html --title Report\nhandoff /tmp/b.html\nosascript -e on run argv -e display notification (item 2 of argv) with title (item 1 of argv) -e end run Done It "passed"\n'
+        )
+      }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
   )
 
-  it.live("on Linux opens URLs and files with xdg-open", () =>
+  it.live("on Linux opens URLs in the default browser's desktop entry and files with xdg-open", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem
       const folder = yield* fs.makeTempDirectoryScoped()
       yield* fs.writeFileString(`${folder}/wayland-1`, "")
+      yield* browserEntry(folder)
       const open = yield* script(folder, "xdg-open", `echo "xdg-open $WAYLAND_DISPLAY $*" >> ${folder}/log`)
       yield* Effect.gen(function* () {
         const desktop = yield* Desktop
@@ -120,6 +152,8 @@ describe("Desktop", () => {
             hyprctl: `${folder}/missing`,
             shell: "/bin/sh",
             wlCopy: "/bin/true",
+            xdgMime: `${folder}/xdg-mime`,
+            launcher: open,
             openerWindow: Duration.millis(300)
           }).pipe(Layer.provide(sessionIn(folder)))
         )
@@ -128,7 +162,7 @@ describe("Desktop", () => {
 
       assert.strictEqual(
         log,
-        "xdg-open wayland-1 https://example.com/\nxdg-open wayland-1 /tmp/a.html\nxdg-open wayland-1 --app-name=sth-seat -- Done It passed\n"
+        "xdg-open wayland-1 browser.desktop https://example.com/\nxdg-open wayland-1 /tmp/a.html\nxdg-open wayland-1 --app-name=sth-seat -- Done It passed\n"
       )
     }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
   )
@@ -149,6 +183,8 @@ describe("Desktop", () => {
               hyprctl: `${folder}/missing`,
               shell: "/bin/sh",
               wlCopy: "/bin/true",
+              xdgMime: `${folder}/xdg-mime`,
+              launcher: open,
               openerWindow: Duration.millis(300)
             }).pipe(Layer.provide(sessionIn(folder)))
           )
@@ -165,6 +201,8 @@ describe("Desktop", () => {
               hyprctl: `${folder}/missing`,
               shell: "/bin/sh",
               wlCopy: "/bin/true",
+              xdgMime: `${folder}/xdg-mime`,
+              launcher: open,
               openerWindow: Duration.millis(300)
             }).pipe(Layer.provide(DesktopSession.wayland({ runtimeDir: Option.none(), waylandDisplay: Option.none() })))
           )
@@ -182,6 +220,8 @@ describe("Desktop", () => {
               hyprctl: `${folder}/missing`,
               shell: "/bin/sh",
               wlCopy: "/bin/true",
+              xdgMime: `${folder}/xdg-mime`,
+              launcher: open,
               openerWindow: Duration.millis(300)
             }).pipe(Layer.provide(sessionIn(`${folder}/missing`)))
           )
@@ -206,7 +246,15 @@ describe("Desktop", () => {
         const gdbus = yield* script(folder, "gdbus", `echo "gdbus $*" >> ${folder}/log`)
         yield* Desktop.use((desktop) => desktop.revealFile("/inbox/app.dmg")).pipe(
           Effect.provide(
-            Desktop.darwin({ open, handoff: open, osascript: open, secretPrompt: open, pbcopy: "/bin/true" })
+            Desktop.darwin({
+              open,
+              handoff: open,
+              osascript: open,
+              secretPrompt: open,
+              pbcopy: "/bin/true",
+              plutil: "/nonexistent/plutil",
+              launchServices: "/nonexistent.plist"
+            })
           )
         )
         yield* Desktop.use((desktop) => desktop.revealFile("/inbox/Bob's report #1.pdf")).pipe(
@@ -233,6 +281,7 @@ describe("Desktop", () => {
         `echo "$*" >> ${folder}/asked; echo '{"class":"wow.exe","fullscreen":0}'`
       )
       const kitty = yield* script(folder, "hyprctl-kitty", `echo '{"class":"kitty","fullscreen":0}'`)
+      yield* browserEntry(folder)
       const openWith = (hyprctl: string) =>
         Desktop.use((linux) => linux.openUrl(url)).pipe(Effect.provide(onLinux(folder, desktop, desktop, hyprctl)))
       yield* openWith(wow)
@@ -246,7 +295,7 @@ describe("Desktop", () => {
       assert.strictEqual(whilePlaying, "desktop --app-name=sth-seat -- sth-seat Ready to open: https://example.com/\n")
       assert.strictEqual(
         after,
-        "desktop --app-name=sth-seat -- sth-seat Ready to open: https://example.com/\ndesktop https://example.com/\ndesktop https://example.com/\n"
+        "desktop --app-name=sth-seat -- sth-seat Ready to open: https://example.com/\ndesktop browser.desktop https://example.com/\ndesktop browser.desktop https://example.com/\n"
       )
     }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
   )
@@ -352,6 +401,8 @@ describe("Desktop", () => {
             hyprctl: `${folder}/missing`,
             shell: "/bin/sh",
             wlCopy: "/bin/true",
+            xdgMime: `${folder}/xdg-mime`,
+            launcher: zenity,
             openerWindow: Duration.millis(300)
           }).pipe(Layer.provide(sessionIn(folder)))
         )
@@ -377,6 +428,7 @@ describe("Desktop", () => {
         `echo chatter; echo noise >&2; sleep 1; echo still > ${folder}/survived`
       )
       const broken = yield* script(folder, "broken-open", "echo no method >&2; exit 3")
+      yield* browserEntry(folder)
       const layerWith = (open: string) =>
         Desktop.linux({
           open,
@@ -386,6 +438,8 @@ describe("Desktop", () => {
           hyprctl: `${folder}/missing`,
           shell: "/bin/sh",
           wlCopy: "/bin/true",
+          xdgMime: `${folder}/xdg-mime`,
+          launcher: open,
           openerWindow: Duration.millis(300)
         }).pipe(Layer.provide(sessionIn(folder)))
       yield* Desktop.use((desktop) => desktop.openUrl(url)).pipe(Effect.provide(layerWith(lingering)))
@@ -395,8 +449,80 @@ describe("Desktop", () => {
       yield* Effect.sleep("1500 millis")
       const survived = yield* fs.exists(`${folder}/survived`)
 
-      assert.include(failed.message, "broken-open https://example.com/ failed: exit code 3: no method")
+      assert.include(failed.message, "broken-open browser.desktop https://example.com/ failed: exit code 3: no method")
       assert.isTrue(survived)
+    }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
+  )
+
+  it.live("refuses a link it can't read as http or https on both platforms, launching nothing", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const folder = yield* fs.makeTempDirectoryScoped()
+      yield* fs.writeFileString(`${folder}/wayland-1`, "")
+      yield* browserEntry(folder)
+      const open = yield* script(folder, "open", `echo "open $*" >> ${folder}/log`)
+      const broken = WebUrl.make("http://[")
+      const mac = Desktop.darwin({
+        open,
+        handoff: open,
+        osascript: open,
+        secretPrompt: open,
+        pbcopy: open,
+        plutil: open,
+        launchServices: open
+      })
+      const refusals = yield* Effect.forEach([mac, onLinux(folder, open, open)], (platform) =>
+        Effect.flip(Desktop.use((desktop) => desktop.openUrl(broken)).pipe(Effect.provide(platform)))
+      )
+      const launched = yield* fs.exists(`${folder}/log`)
+
+      assert.deepStrictEqual(
+        refusals.map((error) => error.message),
+        ["open failed: http://[ isn't a URL it can read.", "open failed: http://[ isn't a URL it can read."]
+      )
+      assert.isFalse(launched)
+    }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
+  )
+
+  it.live("on Linux says how to set a default browser when there is none, instead of falling back to xdg-open", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const folder = yield* fs.makeTempDirectoryScoped()
+      yield* fs.writeFileString(`${folder}/wayland-1`, "")
+      yield* script(folder, "xdg-mime", "echo")
+      const open = yield* script(folder, "xdg-open", `echo "xdg-open $*" >> ${folder}/log`)
+      const failed = yield* Effect.flip(
+        Desktop.use((desktop) => desktop.openUrl(url)).pipe(Effect.provide(onLinux(folder, open, open)))
+      )
+      const launched = yield* fs.exists(`${folder}/log`)
+
+      assert.include(failed.message, "no default browser is set")
+      assert.isFalse(launched)
+    }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
+  )
+
+  it.live("on macOS opens URLs in Safari when Launch Services names no browser", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const folder = yield* fs.makeTempDirectoryScoped()
+      const open = yield* script(folder, "open", `echo "open $*" >> ${folder}/log`)
+      const missing = `${folder}/missing`
+      yield* Desktop.use((desktop) => desktop.openUrl(url)).pipe(
+        Effect.provide(
+          Desktop.darwin({
+            open,
+            handoff: missing,
+            osascript: missing,
+            secretPrompt: missing,
+            pbcopy: missing,
+            plutil: missing,
+            launchServices: missing
+          })
+        )
+      )
+      const log = yield* logged(folder)
+
+      assert.strictEqual(log, "open -b com.apple.Safari https://example.com/\n")
     }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
   )
 })

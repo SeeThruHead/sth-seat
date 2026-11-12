@@ -16,15 +16,23 @@ export class UnsupportedPlatform extends Schema.TaggedError<UnsupportedPlatform,
   }
 }
 
-export type PlatformSettings = SessionSettings & { readonly os: string; readonly handoff: string }
+export type PlatformSettings = SessionSettings & {
+  readonly os: string
+  readonly handoff: string
+  readonly home: string
+}
 
 const darwinTools = {
   open: "open",
   ioreg: "ioreg",
   osascript: "osascript",
   secretPrompt: "herdr-secret",
-  pbcopy: "pbcopy"
+  pbcopy: "pbcopy",
+  plutil: "plutil"
 }
+
+const launchServicesIn = (home: string): string =>
+  `${home}/Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist`
 
 const linuxTools = {
   open: "xdg-open",
@@ -34,7 +42,9 @@ const linuxTools = {
   gdbus: "gdbus",
   hyprctl: "hyprctl",
   shell: "/bin/sh",
-  wlCopy: "wl-copy"
+  wlCopy: "wl-copy",
+  xdgMime: "xdg-mime",
+  launcher: "gtk-launch"
 }
 
 type PlatformLayer = Layer.Layer<Desktop | Idle, never, ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem>
@@ -46,7 +56,9 @@ const layers = (settings: PlatformSettings): Readonly<Record<string, PlatformLay
       handoff: settings.handoff,
       osascript: darwinTools.osascript,
       secretPrompt: darwinTools.secretPrompt,
-      pbcopy: darwinTools.pbcopy
+      pbcopy: darwinTools.pbcopy,
+      plutil: darwinTools.plutil,
+      launchServices: launchServicesIn(settings.home)
     }),
     Idle.darwin(darwinTools.ioreg)
   ),
@@ -59,6 +71,8 @@ const layers = (settings: PlatformSettings): Readonly<Record<string, PlatformLay
       hyprctl: linuxTools.hyprctl,
       shell: linuxTools.shell,
       wlCopy: linuxTools.wlCopy,
+      xdgMime: linuxTools.xdgMime,
+      launcher: linuxTools.launcher,
       openerWindow
     }),
     Idle.wayland(linuxTools.swayidle)
@@ -76,13 +90,18 @@ export type NeededTool = { readonly tool: string; readonly why: string }
 
 const neededTools: Readonly<Record<string, ReadonlyArray<NeededTool>>> = {
   darwin: [
-    { tool: darwinTools.open, why: "URLs open with it, and `open --reveal` shows files in Finder with it" },
+    {
+      tool: darwinTools.open,
+      why: "URLs open in the default browser with it (`open -b`), and `open --reveal` shows files in Finder with it"
+    },
     { tool: "handoff", why: "files for the seat go to Handoff with it; install Handoff's CLI or set SEAT_HANDOFF" },
     { tool: darwinTools.osascript, why: "notifications and secret prompts use it" },
     { tool: darwinTools.ioreg, why: "idle time comes from it" }
   ],
   linux: [
-    { tool: linuxTools.open, why: "URLs and files open with it (xdg-utils)" },
+    { tool: linuxTools.open, why: "files open with it (xdg-utils)" },
+    { tool: linuxTools.xdgMime, why: "the default browser comes from it (xdg-utils)" },
+    { tool: linuxTools.launcher, why: "URLs open in the default browser with it, never through xdg-open (gtk3)" },
     { tool: linuxTools.swayidle, why: "idle time comes from it, so this machine can be the seat" },
     { tool: linuxTools.notifySend, why: "notifications use it (libnotify)" },
     { tool: linuxTools.zenity, why: "secret prompts use it" },

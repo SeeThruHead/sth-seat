@@ -7,6 +7,7 @@ import { Checks, fail, healthy, lineOf, ok, toolCheck, warn } from "../../domain
 import type { Check } from "../../domains/doctor/Doctor.ts"
 import { Files } from "../../domains/files/Files.ts"
 import { Policies } from "../../domains/policy/Policies.ts"
+import { deliveriesOf } from "../../domains/policy/Policy.ts"
 import { brewStablePath, isBunRuntime } from "../../domains/service/Service.ts"
 import { platformLayer, serviceLayer, toolsNeededOn } from "../../platform/Platform.ts"
 import { ServiceManager } from "../../platform/Service.ts"
@@ -31,7 +32,7 @@ export const daemonCommand = (version: string) =>
 
       return yield* daemon({ hubUrl: found.hubUrl, identity: found.identity, remote }, version).pipe(
         Effect.provide([
-          platformLayer({ os: process.platform, handoff: found.handoff, ...found.session }),
+          platformLayer({ os: process.platform, handoff: found.handoff, home: found.home, ...found.session }),
           Files.layer(found.inbox, found.secrets),
           Shell.layer(found.shell),
           Ports.layer,
@@ -230,7 +231,7 @@ const policyCheck = Effect.fnUntraced(function* (found: Settings) {
 
   return ok(
     "policy",
-    `${policy.success.allow.length} rule(s); trusts ${trusted.length === 0 ? "no machines" : trusted.join(", ")}`
+    `${policy.success.allow.length} rule(s); trusts ${trusted.length === 0 ? "no machines" : trusted.join(", ")}; ${deliveriesOf(policy.success, found.home)}`
   )
 })
 

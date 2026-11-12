@@ -6,7 +6,15 @@ import { platformLayer } from "./Platform.ts"
 
 const builds = (os: string) =>
   Effect.scoped(
-    Layer.build(platformLayer({ os, handoff: "handoff", runtimeDir: Option.none(), waylandDisplay: Option.none() }))
+    Layer.build(
+      platformLayer({
+        os,
+        handoff: "handoff",
+        home: "/home/user",
+        runtimeDir: Option.none(),
+        waylandDisplay: Option.none()
+      })
+    )
   ).pipe(
     Effect.map((context) => context.mapUnsafe.has(Desktop.key)),
     Effect.provide(BunServices.layer)

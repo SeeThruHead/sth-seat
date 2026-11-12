@@ -102,6 +102,8 @@ describe("execute", () => {
       Effect.fnUntraced(function* (folder: string) {
         const opened = yield* Opened
         const audit = yield* Audit
+        const fs = yield* FileSystem.FileSystem
+        yield* fs.writeFileString(`${folder}/a.html`, "<p>a</p>")
         const page = yield* execute({ _tag: "OpenUrl", id, url }, home)
         const file = yield* execute(
           { _tag: "OpenFile", id, path: FilePath.make(`${folder}/a.html`), title: Title.make("A") },
@@ -179,11 +181,11 @@ describe("execute", () => {
     )
   )
 
-  it.effect("takes only the kinds of delivery its policy names, refusing a tunnelled page and a secret prompt", () =>
+  it.effect("takes only the deliveries its policy names, refusing a tunnelled page and secrets", () =>
     inMachine(
       Effect.fnUntraced(function* (folder: string) {
         const opened = yield* Opened
-        yield* writePolicy(folder, "allow:\n  - from: [hub]\n    can: [file, url, notify]\n")
+        yield* writePolicy(folder, "allow:\n  - from: [hub]\n    can: [open-file, open-url, reveal, notify]\n")
         const bytes = new TextEncoder().encode("notes")
         const delivered = yield* Effect.forEach(
           [
@@ -213,13 +215,63 @@ describe("execute", () => {
           delivered.map((outcome) => outcome._tag),
           ["Done", "Done", "Done"]
         )
-        assert.include(
-          reasonOf(page),
-          "doesn't let the hub open a localhost page from another machine through a tunnel"
-        )
-        assert.include(reasonOf(asked), "doesn't let the hub ask for or store a secret (secret)")
-        assert.include(reasonOf(stored), "(secret)")
+        assert.include(reasonOf(page), "doesn't let the hub open-tunnelled-page (")
+        assert.include(reasonOf(asked), "doesn't let the hub ask-secret (")
+        assert.include(reasonOf(stored), "doesn't let the hub store-secret (")
         assert.strictEqual(all.length, 3)
+      })
+    )
+  )
+
+  it.effect("needs reveal to show a file in the file manager and open-file to open it", () =>
+    inMachine(
+      Effect.fnUntraced(function* (folder: string) {
+        const bytes = new TextEncoder().encode("notes")
+        const notes = FileName.make("notes.txt")
+        yield* writePolicy(folder, "allow:\n  - from: [hub]\n    can: [open-file]\n")
+        const revealed = yield* execute({ _tag: "ReceiveFile", id, name: notes, bytes, reveal: true }, home)
+        yield* writePolicy(folder, "allow:\n  - from: [hub]\n    can: [reveal]\n")
+        const opened = yield* execute({ _tag: "ReceiveFile", id, name: notes, bytes }, home)
+        const shown = yield* execute({ _tag: "ReceiveFile", id, name: notes, bytes, reveal: true }, home)
+
+        assert.include(reasonOf(revealed), "doesn't let the hub reveal (")
+        assert.include(reasonOf(opened), "doesn't let the hub open-file (")
+        assert.deepStrictEqual(shown, { _tag: "Done" })
+      })
+    )
+  )
+
+  it.effect("opens only documents, never something that could run, and still reveals those", () =>
+    inMachine(
+      Effect.fnUntraced(function* (folder: string) {
+        const fs = yield* FileSystem.FileSystem
+        const opened = yield* Opened
+        const bytes = new TextEncoder().encode("#!/bin/sh\nsay hi\n")
+        const launchers = ["run.command", "Calculator.webloc", "x.terminal", "x.fileloc", "tool.py", "README"]
+        const received = yield* Effect.forEach(launchers, (one) =>
+          execute({ _tag: "ReceiveFile", id, name: FileName.make(one), bytes }, home)
+        )
+        yield* fs.makeDirectory(`${folder}/Evil.app`)
+        yield* fs.writeFileString(`${folder}/report.html`, "<p>hi</p>")
+        yield* fs.chmod(`${folder}/report.html`, 0o755)
+        const bundle = yield* execute({ _tag: "OpenFile", id, path: FilePath.make(`${folder}/Evil.app`) }, home)
+        const runnable = yield* execute({ _tag: "OpenFile", id, path: FilePath.make(`${folder}/report.html`) }, home)
+        const missing = yield* execute({ _tag: "OpenFile", id, path: FilePath.make(`${folder}/gone.pdf`) }, home)
+        const revealed = yield* execute(
+          { _tag: "ReceiveFile", id, name: FileName.make("run.command"), bytes, reveal: true },
+          home
+        )
+        const all = yield* opened.all
+
+        assert.deepStrictEqual(
+          received.map((outcome) => reasonOf(outcome).includes("isn't a kind of document this machine opens")),
+          [true, true, true, true, true, true]
+        )
+        assert.include(reasonOf(bundle), "is a folder or bundle, so it is only shown in the file manager")
+        assert.include(reasonOf(runnable), "is executable")
+        assert.include(reasonOf(missing), "can't be read")
+        assert.deepStrictEqual(revealed, { _tag: "Done" })
+        assert.deepStrictEqual(all, [`reveal ${folder}/inbox/${id}/run.command`])
       })
     )
   )

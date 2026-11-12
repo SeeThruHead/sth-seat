@@ -76,8 +76,10 @@ printf %s "$token" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -
    `brew install seethruhead/tap/sth-seat`. Or download `sth-seat-<os>-<arch>` (`linux-x64`, `linux-arm64`,
    `darwin-arm64`, `darwin-x64`) from the GitHub release, or build all four with
    `bun install && bun run release` in `apps/seat` (they land in `apps/seat/dist/release/`). It needs nothing
-   else installed. On Linux the desktop features also want `swayidle` (idle time), `xdg-open`, `notify-send`,
-   `zenity` and `gdbus` (to show a file in the file manager).
+   else installed. On Linux the desktop features also want `swayidle` (idle time), `xdg-mime` and `gtk-launch`
+   (links open in the default browser's desktop entry, never through `xdg-open`), `xdg-open` (files),
+   `notify-send`, `zenity` and `gdbus` (to show a file in the file manager). On macOS links open with
+   `open -b <default browser>`, read from Launch Services (Safari when none is set).
    On macOS, secret prompts use a program named `herdr-secret` when one is on the daemon's PATH (`~/.local/bin`
    is on it), and the built-in hidden dialog otherwise. sth-seat runs it as
    `herdr-secret --stdout --machine <label> --file <path> -- <name> <question>`, with `HERDR_SECRET_WAIT` set to
@@ -108,14 +110,20 @@ printf %s "$token" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -
    ```
 
    Capabilities are `shell` (run commands), `read` and `write` (files, limited to `folders`, default `~`),
-   `tunnel` (reach this machine's localhost ports) and `receive` (everything the hub delivers). `receive` is
-   short for five finer ones, which a rule can name instead: `url` (open a web address), `file` (show a file sent
-   here), `notify` (show a notification), `page` (open another machine's localhost page through a tunnel) and
-   `secret` (prompt for a secret, or store one asked for here). Anything not listed is refused. With no policy
-   file, only the hub may deliver things. A machine that should take things in without anything leaving it, such
-   as a work laptop, lists `- from: [hub]` with `can: [file, url, notify]`: a tunnelled page carries data both
-   ways while it is open and a secret's answer leaves the machine, so both are refused there, with a message
-   saying why.
+   `tunnel` (reach this machine's localhost ports), and one for each thing the hub delivers: `open-url` (a link,
+   in the browser), `open-file` (open a file sent here or already here), `reveal` (show a file in the file
+   manager), `notify`, `ask-secret` (prompt for a secret, whose answer leaves the machine), `store-secret` (store
+   a secret this machine asked for) and `open-tunnelled-page` (another machine's localhost page, through a
+   tunnel). `receive` is short for all seven. Anything not listed is refused, and the refusal names the
+   capability; `sth-seat doctor` lists what the hub may deliver. With no policy file, only the hub may deliver
+   things. A machine that should take things in without anything leaving it, such as a work laptop, lists
+   `- from: [hub]` with `can: [open-url, open-file, reveal, notify]`: a tunnelled page carries data both ways
+   while it is open and a secret's answer leaves the machine, so both are refused there.
+
+   Whatever the policy, the daemon itself opens only `http` and `https` links, and opens a file only when it is
+   a document (HTML, PDF, images, text, office files, audio and video): a folder or bundle, an executable file,
+   or anything else (`.app`, `.command`, `.webloc`, `.terminal`, `.py` and the like) is refused, since the
+   system opener would run it. Those can still be revealed.
 
    `messages` (a top-level key next to `allow`) says which machines may send this one messages, separately from
    what they may run:

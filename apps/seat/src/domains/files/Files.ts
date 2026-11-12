@@ -15,12 +15,65 @@ const megabytes = (bytes: number): string => `${Math.ceil(bytes / (1024 * 1024))
 
 const decodeName = Schema.decodeUnknownEffect(FileName)
 
+const shownKinds = [
+  "html",
+  "htm",
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "svg",
+  "heic",
+  "tif",
+  "tiff",
+  "bmp",
+  "txt",
+  "md",
+  "markdown",
+  "log",
+  "csv",
+  "tsv",
+  "json",
+  "jsonl",
+  "yaml",
+  "yml",
+  "toml",
+  "xml",
+  "diff",
+  "patch",
+  "rtf",
+  "docx",
+  "xlsx",
+  "pptx",
+  "mp4",
+  "mov",
+  "m4v",
+  "webm",
+  "mp3",
+  "m4a",
+  "wav"
+]
+
+const executable = 0o111
+
+export const isShownKind = (name: string): boolean => {
+  const dot = name.lastIndexOf(".")
+  if (dot <= 0) return false
+
+  return shownKinds.includes(name.slice(dot + 1).toLowerCase())
+}
+
+const onlyRevealed = "so it is only shown in the file manager (open it with --reveal), never opened where it could run."
+
 export class Files extends Context.Service<
   Files,
   {
     read(path: FilePath): Effect.Effect<{ readonly name: FileName; readonly bytes: FileBytes }, FileRefused>
     receive(id: CommandId, name: FileName, bytes: FileBytes): Effect.Effect<string, FileRefused>
     storeSecret(name: SecretName, value: SecretValue): Effect.Effect<string, FileRefused>
+    showable(file: string): Effect.Effect<void, FileRefused>
   }
 >()("seat/domains/files/Files") {
   static readonly layer = (inbox: string, secrets: string = `${inbox}/../secrets`) =>
@@ -68,7 +121,16 @@ export class Files extends Context.Service<
           return path.normalize(target)
         })
 
-        return Files.of({ read, receive, storeSecret })
+        const showable = Effect.fn("Files.showable")(function* (file: string) {
+          const refuse = (problem: string) => new FileRefused({ path: file, problem })
+          const info = yield* fs.stat(file).pipe(Effect.mapError((error) => refuse(`can't be read: ${error.message}`)))
+          if (info.type !== "File") return yield* refuse(`is a folder or bundle, ${onlyRevealed}`)
+          if ((info.mode & executable) !== 0) return yield* refuse(`is executable, ${onlyRevealed}`)
+          if (!isShownKind(path.basename(file)))
+            return yield* refuse(`isn't a kind of document this machine opens, ${onlyRevealed}`)
+        })
+
+        return Files.of({ read, receive, storeSecret, showable })
       })
     )
 }

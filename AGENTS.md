@@ -92,8 +92,10 @@ import transports; `packages/protocol` imports no platform code; `Rpc.make`, `Rp
   replay); replies are signed and numbered. Every call is in the receiver's audit log.
 - A secret from `ask_user_secret` never reaches the agent: it is `Redacted` in the protocol, written to a
   mode-600 file on the asking machine, and only the path goes back.
-- The receiving machine decides what it lets in: `receive` in a policy is short for `url`, `file`, `notify`,
-  `page` (a tunnelled localhost page) and `secret`, and a rule naming only some refuses the rest on that machine.
+- The receiving machine decides what it lets in: each delivery is a capability (`open-url`, `open-file`, `reveal`,
+  `notify`, `ask-secret`, `store-secret`, `open-tunnelled-page`; `receive` is all of them), checked on that machine.
+- The seat opens only `http(s)` links, by naming the default browser (never `open`/`xdg-open` on a link), and only
+  document files, never anything the system opener would run; it doesn't rely on the hub's checks for either.
 - A machine with `secrets: here` (its policy, and its entry in the hub's config) keeps its secrets: `ask-secret`
   prompts on it without the hub, its daemon refuses `StoreSecret`, and the hub refuses secret requests from it.
 - A file sent to the seat (`open`) goes only to the seat, at most 32 MB, regular files only, into its own inbox

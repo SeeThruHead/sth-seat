@@ -3,7 +3,15 @@ import { SecretsKept } from "@sth-seat/protocol/Daemon.ts"
 import { MachineName } from "@sth-seat/protocol/Ids.ts"
 import { PublicKeyText } from "@sth-seat/protocol/Keys.ts"
 
-const received = ["url", "file", "notify", "page", "secret"] as const
+export const received = [
+  "open-url",
+  "open-file",
+  "reveal",
+  "notify",
+  "ask-secret",
+  "store-secret",
+  "open-tunnelled-page"
+] as const
 export type Received = (typeof received)[number]
 
 export const Capability = Schema.Literals(["shell", "read", "write", "tunnel", "receive", ...received])
@@ -88,11 +96,14 @@ const doing: Record<Capability, string> = {
   write: "write",
   tunnel: "tunnel",
   receive: "receive",
-  url: "open a URL (url)",
-  file: "deliver a file (file)",
-  notify: "show a notification (notify)",
-  page: "open a localhost page from another machine through a tunnel, which carries data both ways (page)",
-  secret: "ask for or store a secret (secret)"
+  "open-url": "open-url (open a link in the browser)",
+  "open-file": "open-file (open a file sent to or kept on this machine)",
+  reveal: "reveal (show a file in the file manager)",
+  notify: "notify (show a notification)",
+  "ask-secret": "ask-secret (prompt for a secret, whose answer leaves this machine)",
+  "store-secret": "store-secret (store a secret this machine asked for)",
+  "open-tunnelled-page":
+    "open-tunnelled-page (open another machine's localhost page through a tunnel, which carries data both ways)"
 }
 
 export const decide = (policy: PolicyFile, ask: Ask, home: string): Result.Result<void, string> => {
@@ -102,6 +113,21 @@ export const decide = (policy: PolicyFile, ask: Ask, home: string): Result.Resul
   return Result.fail(
     `This machine's policy doesn't let ${named(ask.caller)} ${doing[ask.capability]}${where} (~/.config/sth-seat/policy.yaml).`
   )
+}
+
+export const hubDelivers = (policy: PolicyFile, home: string): ReadonlyArray<Received> =>
+  received.filter((capability) =>
+    Result.isSuccess(decide(policy, { caller: hub, capability, path: Option.none() }, home))
+  )
+
+const joined = (capabilities: ReadonlyArray<Received>): string =>
+  capabilities.length === 0 ? "nothing" : capabilities.join(", ")
+
+export const deliveriesOf = (policy: PolicyFile, home: string): string => {
+  const taken = hubDelivers(policy, home)
+  const refused = received.filter((capability) => !taken.includes(capability))
+
+  return `the hub may ${joined(taken)}; refused: ${joined(refused)}`
 }
 
 export const keepsSecrets = (policy: PolicyFile): boolean => policy.secrets === "here"

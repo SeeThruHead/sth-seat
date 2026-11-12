@@ -48,13 +48,13 @@ const receives = (capability: Received): Need => ({ capability, path: Option.non
 const needs = (command: HubMade): Need =>
   Match.valueTags(command, {
     ReadFile: ({ path }): Need => ({ capability: "read", path: Option.some(path) }),
-    OpenUrl: () => receives("url"),
-    OpenFile: () => receives("file"),
-    ReceiveFile: () => receives("file"),
+    OpenUrl: () => receives("open-url"),
+    OpenFile: ({ reveal }) => receives(reveal === true ? "reveal" : "open-file"),
+    ReceiveFile: ({ reveal }) => receives(reveal === true ? "reveal" : "open-file"),
     Notify: () => receives("notify"),
-    OpenTunnel: () => receives("page"),
-    AskSecret: () => receives("secret"),
-    StoreSecret: () => receives("secret")
+    OpenTunnel: () => receives("open-tunnelled-page"),
+    AskSecret: () => receives("ask-secret"),
+    StoreSecret: () => receives("store-secret")
   })
 
 const keptHere =
@@ -82,8 +82,11 @@ const perform = Effect.fnUntraced(function* (command: HubMade) {
   const files = yield* Files
   const tunnels = yield* Tunnels
 
+  const opened = (path: string, title: Title | undefined) =>
+    files.showable(path).pipe(Effect.andThen(desktop.openFile(path, Option.fromNullishOr(title))))
+
   const show = (path: string, title: Title | undefined, reveal: boolean | undefined) =>
-    reveal === true ? desktop.revealFile(path) : desktop.openFile(path, Option.fromNullishOr(title))
+    reveal === true ? desktop.revealFile(path) : opened(path, title)
 
   return yield* Match.valueTags(command, {
     OpenUrl: ({ url }) => Effect.as(desktop.openUrl(url), done),

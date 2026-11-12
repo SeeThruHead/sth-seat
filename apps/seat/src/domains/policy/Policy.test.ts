@@ -7,6 +7,9 @@ import {
   copiesMessages,
   decide,
   defaultPolicy,
+  deliveriesOf,
+  hubDelivers,
+  received,
   expandHome,
   hub,
   keepsSecrets,
@@ -75,23 +78,27 @@ describe("policy", () => {
     )
   })
 
-  it("lets receive cover every kind of delivery, and a rule name only some of them", () => {
-    const deliveries: ReadonlyArray<Capability> = ["url", "file", "notify", "page", "secret"]
-    const oneWay = Schema.decodeSync(PolicyFile)({ allow: [{ from: ["hub"], can: ["file", "url", "notify"] }] })
+  it("lets receive cover everything the hub delivers, and a rule name each capability on its own", () => {
+    const oneWay = Schema.decodeSync(PolicyFile)({
+      allow: [{ from: ["hub"], can: ["open-url", "open-file", "reveal", "notify"] }]
+    })
 
+    assert.deepStrictEqual(hubDelivers(defaultPolicy, home), received)
+    assert.deepStrictEqual(hubDelivers(oneWay, home), ["open-url", "open-file", "reveal", "notify"])
+    assert.isFalse(allowed(oneWay, ask(hub, "receive")))
     assert.deepStrictEqual(
-      deliveries.map((capability) => allowed(defaultPolicy, ask(hub, capability))),
-      [true, true, true, true, true]
-    )
-    assert.deepStrictEqual(
-      deliveries.concat(["receive", "read"]).map((capability) => allowed(oneWay, ask(hub, capability))),
-      [true, true, true, false, false, false, false]
-    )
-    assert.deepStrictEqual(
-      decide(oneWay, ask(hub, "page"), home),
+      decide(oneWay, ask(hub, "open-tunnelled-page"), home),
       Result.fail(
-        "This machine's policy doesn't let the hub open a localhost page from another machine through a tunnel, which carries data both ways (page) (~/.config/sth-seat/policy.yaml)."
+        "This machine's policy doesn't let the hub open-tunnelled-page (open another machine's localhost page through a tunnel, which carries data both ways) (~/.config/sth-seat/policy.yaml)."
       )
+    )
+    assert.deepStrictEqual(
+      [oneWay, Schema.decodeSync(PolicyFile)({ allow: [] }), defaultPolicy].map((policy) => deliveriesOf(policy, home)),
+      [
+        "the hub may open-url, open-file, reveal, notify; refused: ask-secret, store-secret, open-tunnelled-page",
+        "the hub may nothing; refused: open-url, open-file, reveal, notify, ask-secret, store-secret, open-tunnelled-page",
+        "the hub may open-url, open-file, reveal, notify, ask-secret, store-secret, open-tunnelled-page; refused: nothing"
+      ]
     )
   })
 

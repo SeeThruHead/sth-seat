@@ -2,11 +2,17 @@
 
 ## 0.7.0
 
-- A policy can take some of what the hub delivers and not the rest: `receive` is now short for `url`, `file`,
-  `notify`, `page` (another machine's localhost page through a tunnel) and `secret` (secret prompts and storing),
-  and a rule may list those instead. `can: [file, url, notify]` takes files, web addresses and notifications but
-  refuses tunnelled pages and secret prompts, which can carry data back out, saying why. `receive` means what it
-  did. Install 0.7.0 before writing the new names: an older daemon can't read them and refuses everything.
+- Each thing the hub delivers is its own policy capability: `open-url`, `open-file`, `reveal`, `notify`,
+  `ask-secret`, `store-secret` and `open-tunnelled-page`. `receive` is short for all seven and means what it did.
+  `can: [open-url, open-file, reveal, notify]` takes links, files and notifications but refuses tunnelled pages
+  and secret prompts, which can carry data back out. Refusals name the capability, and `sth-seat doctor` lists
+  what the hub may deliver. Install 0.7.0 before writing the new names: an older daemon can't read them and
+  refuses everything.
+- The daemon checks links itself: only `http` and `https` open, and they go to the default browser by name
+  (`open -b <bundle id>` on macOS, `gtk-launch <desktop entry>` on Linux), never `open` or `xdg-open` on the link.
+- A file opens only when it is a document (HTML, PDF, images, text, office files, audio, video); folders and
+  bundles, executable files and anything else (`.app`, `.command`, `.webloc`, `.terminal`, scripts) are refused,
+  because Handoff and `xdg-open` hand files to the system opener, which runs them. `--reveal` still shows them.
 
 ## 0.6.0
 
