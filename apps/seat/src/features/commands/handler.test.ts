@@ -12,7 +12,7 @@ import {
   Title,
   WebUrl
 } from "@sth-seat/protocol/Ids.ts"
-import { Envelope, EnvelopeId, RemotePath, SessionId } from "@sth-seat/protocol/Remote.ts"
+import { Envelope, EnvelopeId, Port, RemotePath, SessionId } from "@sth-seat/protocol/Remote.ts"
 import type { Request } from "@sth-seat/protocol/Remote.ts"
 import { seal } from "@sth-seat/protocol/Sealed.ts"
 import type { Outcome } from "@sth-seat/protocol/Daemon.ts"
@@ -175,6 +175,51 @@ describe("execute", () => {
 
         assert.include(reasonOf(stored), "Secrets asked from this machine stay on it")
         assert.isFalse(written)
+      })
+    )
+  )
+
+  it.effect("takes only the kinds of delivery its policy names, refusing a tunnelled page and a secret prompt", () =>
+    inMachine(
+      Effect.fnUntraced(function* (folder: string) {
+        const opened = yield* Opened
+        yield* writePolicy(folder, "allow:\n  - from: [hub]\n    can: [file, url, notify]\n")
+        const bytes = new TextEncoder().encode("notes")
+        const delivered = yield* Effect.forEach(
+          [
+            { _tag: "OpenUrl", id, url },
+            { _tag: "Notify", id, title: Title.make("Build"), message: "It passed." },
+            { _tag: "ReceiveFile", id, name: FileName.make("notes.txt"), bytes }
+          ] as const,
+          (command) => execute(command, home)
+        )
+        const page = yield* execute(
+          {
+            _tag: "OpenTunnel",
+            id,
+            origin: MachineName.make("cube"),
+            scheme: "http",
+            port: Port.make(6006),
+            path: "/"
+          },
+          home
+        )
+        const name = SecretName.make("plex-token")
+        const asked = yield* execute({ _tag: "AskSecret", id, name, question: "Plex token?" }, home)
+        const stored = yield* execute({ _tag: "StoreSecret", id, name, value: Redacted.make("s3cret") }, home)
+        const all = yield* opened.all
+
+        assert.deepStrictEqual(
+          delivered.map((outcome) => outcome._tag),
+          ["Done", "Done", "Done"]
+        )
+        assert.include(
+          reasonOf(page),
+          "doesn't let the hub open a localhost page from another machine through a tunnel"
+        )
+        assert.include(reasonOf(asked), "doesn't let the hub ask for or store a secret (secret)")
+        assert.include(reasonOf(stored), "(secret)")
+        assert.strictEqual(all.length, 3)
       })
     )
   )

@@ -75,6 +75,26 @@ describe("policy", () => {
     )
   })
 
+  it("lets receive cover every kind of delivery, and a rule name only some of them", () => {
+    const deliveries: ReadonlyArray<Capability> = ["url", "file", "notify", "page", "secret"]
+    const oneWay = Schema.decodeSync(PolicyFile)({ allow: [{ from: ["hub"], can: ["file", "url", "notify"] }] })
+
+    assert.deepStrictEqual(
+      deliveries.map((capability) => allowed(defaultPolicy, ask(hub, capability))),
+      [true, true, true, true, true]
+    )
+    assert.deepStrictEqual(
+      deliveries.concat(["receive", "read"]).map((capability) => allowed(oneWay, ask(hub, capability))),
+      [true, true, true, false, false, false, false]
+    )
+    assert.deepStrictEqual(
+      decide(oneWay, ask(hub, "page"), home),
+      Result.fail(
+        "This machine's policy doesn't let the hub open a localhost page from another machine through a tunnel, which carries data both ways (page) (~/.config/sth-seat/policy.yaml)."
+      )
+    )
+  })
+
   it("means any listed machine by *, never the hub", () => {
     const anyMachine = Schema.decodeSync(PolicyFile)({ allow: [{ from: ["*"], can: ["receive", "read"] }] })
 

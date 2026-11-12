@@ -108,9 +108,14 @@ printf %s "$token" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -
    ```
 
    Capabilities are `shell` (run commands), `read` and `write` (files, limited to `folders`, default `~`),
-   `tunnel` (reach this machine's localhost ports) and `receive` (pages, files, notifications and secret prompts
-   from the hub). Anything not listed is refused. With no policy file, only the hub may deliver things. A machine
-   that should only receive, such as a work laptop, lists just `- from: [hub]` with `can: [receive]`.
+   `tunnel` (reach this machine's localhost ports) and `receive` (everything the hub delivers). `receive` is
+   short for five finer ones, which a rule can name instead: `url` (open a web address), `file` (show a file sent
+   here), `notify` (show a notification), `page` (open another machine's localhost page through a tunnel) and
+   `secret` (prompt for a secret, or store one asked for here). Anything not listed is refused. With no policy
+   file, only the hub may deliver things. A machine that should take things in without anything leaving it, such
+   as a work laptop, lists `- from: [hub]` with `can: [file, url, notify]`: a tunnelled page carries data both
+   ways while it is open and a secret's answer leaves the machine, so both are refused there, with a message
+   saying why.
 
    `messages` (a top-level key next to `allow`) says which machines may send this one messages, separately from
    what they may run:

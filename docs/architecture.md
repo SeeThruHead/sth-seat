@@ -41,7 +41,10 @@
 - **Each machine decides what others may do there.** `~/.config/sth-seat/policy.yaml` pins the public keys of
   the machines it trusts (like `authorized_keys`) and lists rules: who (a machine name, `hub`, or `*` for any
   listed machine) may do what (`shell`, `read`, `write`, `tunnel`, `receive`), and in which folders (`read` and
-  `write` default to the home folder). Anything not listed is refused by the daemon itself, whatever the hub
+  `write` default to the home folder). `receive` stands for what the hub delivers, `url`, `file`, `notify`,
+  `page` and `secret`, and a rule may name those one by one: the machine that receives decides what it lets in.
+  `page` (another machine's localhost page, through a tunnel) and `secret` are the deliveries that can carry
+  data back out, so a machine that must keep things in takes only `file`, `url` and `notify`. Anything not listed is refused by the daemon itself, whatever the hub
   says. A missing file means "the hub may deliver pages and files, nothing else". A file that doesn't parse
   means "refuse everything until fixed". `sth-seat lock` refuses everything until `sth-seat unlock`.
 - **The hub routes; it can't forge.** Every command one machine sends another is an envelope (`Remote.ts`:

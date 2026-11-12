@@ -3,7 +3,10 @@ import { SecretsKept } from "@sth-seat/protocol/Daemon.ts"
 import { MachineName } from "@sth-seat/protocol/Ids.ts"
 import { PublicKeyText } from "@sth-seat/protocol/Keys.ts"
 
-export const Capability = Schema.Literals(["shell", "read", "write", "tunnel", "receive"])
+const received = ["url", "file", "notify", "page", "secret"] as const
+export type Received = (typeof received)[number]
+
+export const Capability = Schema.Literals(["shell", "read", "write", "tunnel", "receive", ...received])
 export type Capability = typeof Capability.Type
 
 export const hub = "hub"
@@ -61,21 +64,43 @@ const coversPath = (rule: Rule, path: Option.Option<string>, home: string): bool
     onSome: (wanted) => (rule.folders ?? ["~"]).some((folder) => isInside(wanted, trimmed(expandHome(folder, home))))
   })
 
+const isReceived = (capability: Capability): boolean => received.some((one) => one === capability)
+
+const grants = (rule: Rule, capability: Capability): boolean => {
+  if (rule.can.includes(capability)) return true
+  if (!isReceived(capability)) return false
+
+  return rule.can.includes("receive")
+}
+
 const allows = (rule: Rule, ask: Ask, home: string): boolean => {
   if (!callerMatches(rule, ask.caller)) return false
-  if (!rule.can.includes(ask.capability)) return false
+  if (!grants(rule, ask.capability)) return false
 
   return coversPath(rule, ask.path, home)
 }
 
 const named = (caller: Caller): string => (caller === hub ? "the hub" : caller)
 
+const doing: Record<Capability, string> = {
+  shell: "shell",
+  read: "read",
+  write: "write",
+  tunnel: "tunnel",
+  receive: "receive",
+  url: "open a URL (url)",
+  file: "deliver a file (file)",
+  notify: "show a notification (notify)",
+  page: "open a localhost page from another machine through a tunnel, which carries data both ways (page)",
+  secret: "ask for or store a secret (secret)"
+}
+
 export const decide = (policy: PolicyFile, ask: Ask, home: string): Result.Result<void, string> => {
   if (policy.allow.some((rule) => allows(rule, ask, home))) return Result.succeed(undefined)
   const where = Option.match(ask.path, { onNone: () => "", onSome: (path) => ` on ${path}` })
 
   return Result.fail(
-    `This machine's policy doesn't let ${named(ask.caller)} ${ask.capability}${where} (~/.config/sth-seat/policy.yaml).`
+    `This machine's policy doesn't let ${named(ask.caller)} ${doing[ask.capability]}${where} (~/.config/sth-seat/policy.yaml).`
   )
 }
 

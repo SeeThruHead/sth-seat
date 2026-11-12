@@ -12,7 +12,7 @@ import { Files } from "../../domains/files/Files.ts"
 import { Me } from "../../domains/identity/Me.ts"
 import { Policies } from "../../domains/policy/Policies.ts"
 import { decide, expandHome, hub, keepsSecrets } from "../../domains/policy/Policy.ts"
-import type { Capability, PolicyFile } from "../../domains/policy/Policy.ts"
+import type { Capability, PolicyFile, Received } from "../../domains/policy/Policy.ts"
 import { problemOf } from "../../domains/problem/Problem.ts"
 import { Tunnels } from "../../domains/tunnels/Tunnels.ts"
 import { Desktop } from "../../platform/Desktop.ts"
@@ -41,10 +41,21 @@ const isOwnShare = Effect.fnUntraced(function* (grant: Sealed, path: FilePath, h
   return expandHome(envelope.value.request.path, home) === path
 })
 
-const needs = (command: HubMade): { readonly capability: Capability; readonly path: Option.Option<string> } =>
-  command._tag === "ReadFile"
-    ? { capability: "read", path: Option.some(command.path) }
-    : { capability: "receive", path: Option.none() }
+type Need = { readonly capability: Capability; readonly path: Option.Option<string> }
+
+const receives = (capability: Received): Need => ({ capability, path: Option.none() })
+
+const needs = (command: HubMade): Need =>
+  Match.valueTags(command, {
+    ReadFile: ({ path }): Need => ({ capability: "read", path: Option.some(path) }),
+    OpenUrl: () => receives("url"),
+    OpenFile: () => receives("file"),
+    ReceiveFile: () => receives("file"),
+    Notify: () => receives("notify"),
+    OpenTunnel: () => receives("page"),
+    AskSecret: () => receives("secret"),
+    StoreSecret: () => receives("secret")
+  })
 
 const keptHere =
   "Secrets asked from this machine stay on it (secrets: here in ~/.config/sth-seat/policy.yaml), so it takes none through the hub."

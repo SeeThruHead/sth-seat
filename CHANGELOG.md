@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0
+
+- A policy can take some of what the hub delivers and not the rest: `receive` is now short for `url`, `file`,
+  `notify`, `page` (another machine's localhost page through a tunnel) and `secret` (secret prompts and storing),
+  and a rule may list those instead. `can: [file, url, notify]` takes files, web addresses and notifications but
+  refuses tunnelled pages and secret prompts, which can carry data back out, saying why. `receive` means what it
+  did. Install 0.7.0 before writing the new names: an older daemon can't read them and refuses everything.
+
 ## 0.6.0
 
 - `sth-seat send <machine> <text>` (or the text on stdin) puts a message in another machine's inbox, and
