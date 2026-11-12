@@ -2,7 +2,7 @@ import { DateTime, Effect, Match, Option, Result, Schema } from "effect"
 import type { Cause } from "effect"
 import type { HubCommand, Outcome } from "@sth-seat/protocol/Daemon.ts"
 import { WebUrl } from "@sth-seat/protocol/Ids.ts"
-import type { FilePath, Title } from "@sth-seat/protocol/Ids.ts"
+import type { FilePath, MachineName, Title } from "@sth-seat/protocol/Ids.ts"
 import { isFresh } from "@sth-seat/protocol/Freshness.ts"
 import { Envelope } from "@sth-seat/protocol/Remote.ts"
 import { unseal } from "@sth-seat/protocol/Sealed.ts"
@@ -11,7 +11,7 @@ import { Audit } from "../../domains/audit/Audit.ts"
 import { Files } from "../../domains/files/Files.ts"
 import { Me } from "../../domains/identity/Me.ts"
 import { Policies } from "../../domains/policy/Policies.ts"
-import { decide, expandHome, hub, keepsSecrets } from "../../domains/policy/Policy.ts"
+import { decide, deliveryRefusal, expandHome, hub, keepsSecrets } from "../../domains/policy/Policy.ts"
 import type { Capability, PolicyFile, Received } from "../../domains/policy/Policy.ts"
 import { problemOf } from "../../domains/problem/Problem.ts"
 import { Tunnels } from "../../domains/tunnels/Tunnels.ts"
@@ -60,6 +60,17 @@ const needs = (command: HubMade): Need =>
 const keptHere =
   "Secrets asked from this machine stay on it (secrets: here in ~/.config/sth-seat/policy.yaml), so it takes none through the hub."
 
+const originOf = (command: HubMade): Option.Option<MachineName | undefined> =>
+  command._tag === "ReadFile" || command._tag === "StoreSecret" ? Option.none() : Option.some(command.origin)
+
+const refusesOrigin = Effect.fnUntraced(function* (command: HubMade, policy: PolicyFile) {
+  const me = yield* Me
+  const origin = originOf(command)
+  if (Option.isNone(origin)) return Option.none<string>()
+
+  return deliveryRefusal(policy, origin.value, me.name)
+})
+
 const refusesSecret = (command: HubMade, policy: PolicyFile): boolean =>
   command._tag === "StoreSecret" && keepsSecrets(policy)
 
@@ -72,6 +83,8 @@ const whyNot = Effect.fnUntraced(function* (command: HubMade, home: string) {
   const policy = yield* policies.current.pipe(Effect.result)
   if (Result.isFailure(policy)) return Option.some(policy.failure.message)
   if (refusesSecret(command, policy.success)) return Option.some(keptHere)
+  const foreign = yield* refusesOrigin(command, policy.success)
+  if (Option.isSome(foreign)) return foreign
   const decision = decide(policy.success, { caller: hub, ...needs(command) }, home)
 
   return Result.isFailure(decision) ? Option.some(decision.failure) : Option.none<string>()

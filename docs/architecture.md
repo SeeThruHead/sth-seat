@@ -28,6 +28,29 @@
   stores "last input = now minus idle" per machine. No guessing from which app is focused or which screen is
   on: input is what tells where the user is sitting. A machine that is connected but has never reported input
   only wins when nothing else has.
+- **Only the daemon talks to the hub.** The CLI sends every command to the local daemon over a Unix socket
+  (`daemon.sock` in the state folder, which is mode 700), using `LocalRpcs` (`packages/protocol/src/Local.ts`). The
+  daemon holds the hub link and the machine key: it signs envelopes for `run`, `cp` and `send` (only as itself),
+  makes the share grant for a file `open`, and passes the hub's answers back; the CLI still checks the target's
+  signature on each reply against its own policy. A stopped daemon means sth-seat is off: every command fails and
+  nothing reaches the hub, so a machine that is switched off can't be routed around. The key file stays readable by
+  the same OS user (agents run as that user); no CLI path reads it.
+- **The seat is chosen only among the caller's side, and never away from an offline caller.** Each machine in the
+  hub's config has a `side` (default `default`). Open, notify and secret prompts go to the most recently used
+  connected machine on the caller's side, so a work laptop and home machines never see each other's pages, files,
+  notifications or prompts, whoever was used last. The caller is always known: daemons sign their calls, and the MCP
+  tools require `from`. When the caller's own daemon isn't connected, the hub can't tell whether the user is at it,
+  so it refuses (`ActionFailed` with `offline: true`) instead of picking another machine; `sth-seat open` then
+  opens on the calling machine itself when it has a display. This came from a work laptop whose daemon was off: its
+  pages went to a home machine because that one had the newest input.
+- **The receiver checks the side too.** Every delivery the hub makes (`OpenUrl`, `OpenFile`, `ReceiveFile`,
+  `Notify`, `AskSecret`, `OpenTunnel`) says which machine it is for (`origin`). A policy with
+  `deliveries: from: [...]` takes deliveries only for itself and those machines, and refuses one without an origin,
+  so a hub bug or a wrong config still can't put one side's things on the other.
+- **A lost link is visible.** The daemon writes `~/.local/state/sth-seat/link` (connected, refreshed every 10
+  seconds, or lost with the reason). Every CLI command that uses the hub prints a `warning:` line when it says lost,
+  never linked, or stale for over a minute (the daemon isn't running), and `sth-seat doctor` fails its `daemon`
+  check. When a daemon stays gone for 2 minutes, the hub tells the seat on that machine's side, and nobody else.
 - **Idle time from the OS, one layer per OS.** macOS: `ioreg -c IOHIDSystem` `HIDIdleTime`, polled every 10
   seconds. Linux (Hyprland and other Wayland compositors): `swayidle` watching the ext-idle-notify protocol with
   a 5-second threshold. Until the first real activity after the daemon starts, idle time is unknown and nothing

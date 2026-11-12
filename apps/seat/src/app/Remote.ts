@@ -2,6 +2,7 @@ import { DateTime, Effect, FileSystem, Option, Ref, Result, Runtime, Schema, Std
 import { SecureRandom, Signature } from "effect/crypto"
 import type { HubClient } from "./Hub.ts"
 import type { Identity } from "./Identity.ts"
+import type { LocalClient } from "./LocalClient.ts"
 import { newId } from "@sth-seat/protocol/Ids.ts"
 import type { MachineName } from "@sth-seat/protocol/Ids.ts"
 import { publicKeyOf } from "@sth-seat/protocol/Keys.ts"
@@ -46,15 +47,35 @@ export class RemoteExited extends Schema.TaggedError<RemoteExited, { readonly br
 
 const problem = (text: string) => new RemoteProblem({ problem: text })
 
+type Failure = { readonly message: string }
+
+export type Relayer = {
+  readonly relay: (envelope: Envelope) => Stream.Stream<Sealed, Failure, Signature.Signature>
+  readonly more: (envelope: Envelope) => Effect.Effect<void, Failure, Signature.Signature>
+}
+
+export const throughDaemon = (daemon: LocalClient): Relayer => ({
+  relay: (envelope) => daemon.Relay({ envelope }),
+  more: (envelope) => daemon.RelayMore({ envelope })
+})
+
+const sealedBy = (me: Pick<Identity, "key">, envelope: Envelope) =>
+  seal(Envelope, me.key, "command", envelope).pipe(Effect.mapError((error) => problem(error.message)))
+
+export const throughHub = (hub: HubClient, me: Pick<Identity, "key">): Relayer => ({
+  relay: (envelope) => Stream.unwrap(Effect.map(sealedBy(me, envelope), (sealed) => hub.Relay({ sealed }))),
+  more: (envelope) => Effect.flatMap(sealedBy(me, envelope), (sealed) => hub.RelayMore({ sealed }))
+})
+
 export type Link = {
-  readonly hub: HubClient
-  readonly me: Identity
+  readonly relayer: Relayer
+  readonly me: MachineName
   readonly target: MachineName
   readonly targetKey: MachinePublicKey
   readonly session: SessionId
 }
 
-export const linkTo = Effect.fn("Remote.linkTo")(function* (hub: HubClient, me: Identity, target: MachineName) {
+export const linkTo = Effect.fn("Remote.linkTo")(function* (relayer: Relayer, me: MachineName, target: MachineName) {
   const policies = yield* Policies
   const policy = yield* policies.current.pipe(Effect.mapError((error) => problem(error.message)))
   const pinned = keyOf(policy, target)
@@ -65,32 +86,36 @@ export const linkTo = Effect.fn("Remote.linkTo")(function* (hub: HubClient, me: 
 
   const targetKey = yield* publicKeyOf(pinned.value).pipe(Effect.mapError((error) => problem(error.message)))
   const session = yield* newId(SessionId)
-  const link: Link = { hub, me, target, targetKey, session }
+  const link: Link = { relayer, me, target, targetKey, session }
 
   return link
 })
 
 type Sender = Pick<Identity, "name" | "key">
 
-const sealedEnvelope = Effect.fnUntraced(function* (
-  me: Sender,
-  addressed: { readonly session: SessionId; readonly to: MachineName },
-  request: Request
-) {
+type Addressed = { readonly session: SessionId; readonly to: MachineName }
+
+const envelopeFrom = Effect.fnUntraced(function* (me: MachineName, addressed: Addressed, request: Request) {
   const id = yield* newId(EnvelopeId)
   const now = yield* DateTime.now
-  const envelope = { id, ...addressed, from: me.name, issuedAt: DateTime.toEpochMillis(now), request }
+  const envelope: Envelope = { id, ...addressed, from: me, issuedAt: DateTime.toEpochMillis(now), request }
 
-  return yield* seal(Envelope, me.key, "command", envelope).pipe(Effect.mapError((error) => problem(error.message)))
+  return envelope
 })
 
-const sealedRequest = (link: Link, request: Request) =>
-  sealedEnvelope(link.me, { session: link.session, to: link.target }, request)
+const sealedEnvelope = Effect.fnUntraced(function* (me: Sender, addressed: Addressed, request: Request) {
+  const envelope = yield* envelopeFrom(me.name, addressed, request)
+
+  return yield* sealedBy(me, envelope)
+})
+
+const requestEnvelope = (link: Link, request: Request) =>
+  envelopeFrom(link.me, { session: link.session, to: link.target }, request)
 
 export const sendMore = Effect.fnUntraced(function* (link: Link, request: Request) {
-  const sealed = yield* sealedRequest(link, request)
+  const envelope = yield* requestEnvelope(link, request)
 
-  yield* link.hub.RelayMore({ sealed }).pipe(Effect.mapError((error) => problem(error.message)))
+  yield* link.relayer.more(envelope).pipe(Effect.mapError((error) => problem(error.message)))
 })
 
 export const sendInput = (link: Link, input: Stream.Stream<Uint8Array, unknown>) =>
@@ -107,7 +132,7 @@ const eventIn = Effect.fnUntraced(function* (link: Link, expected: Ref.Ref<numbe
     Effect.mapError(() => problem(`A reply didn't carry ${link.target}'s signature; stopping.`))
   )
   const seq = yield* Ref.getAndUpdate(expected, (count) => count + 1)
-  const event = checkedReply(reply, { session: link.session, from: link.target, to: link.me.name, seq })
+  const event = checkedReply(reply, { session: link.session, from: link.target, to: link.me, seq })
 
   return yield* Result.match(event, { onFailure: (reason) => Effect.fail(problem(reason)), onSuccess: Effect.succeed })
 })
@@ -118,10 +143,10 @@ export const start = (
 ): Stream.Stream<Event, RemoteProblem, SecureRandom.SecureRandom | Signature.Signature> =>
   Stream.unwrap(
     Effect.gen(function* () {
-      const sealed = yield* sealedRequest(link, request)
+      const envelope = yield* requestEnvelope(link, request)
       const expected = yield* Ref.make(0)
 
-      return link.hub.Relay({ sealed }).pipe(
+      return link.relayer.relay(envelope).pipe(
         Stream.mapError((error) => problem(error.message)),
         Stream.mapEffect((reply) => eventIn(link, expected, reply))
       )

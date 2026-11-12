@@ -17,7 +17,8 @@ export const macMachine: Machine = {
   label: MachineLabel.make("Cube"),
   hostnames: [Hostname.make("Office-Cube")],
   publicKey: Option.none(),
-  secrets: "seat"
+  secrets: "seat",
+  side: "default"
 }
 
 export const devMachine: Machine = {
@@ -25,7 +26,19 @@ export const devMachine: Machine = {
   label: MachineLabel.make("Tower"),
   hostnames: [Hostname.make("Tower")],
   publicKey: Option.none(),
-  secrets: "seat"
+  secrets: "seat",
+  side: "default"
+}
+
+export const desk = MachineName.make("desk")
+
+export const deskMachine: Machine = {
+  name: desk,
+  label: MachineLabel.make("Desk"),
+  hostnames: [Hostname.make("Work-Desk")],
+  publicKey: Option.none(),
+  secrets: "here",
+  side: "work"
 }
 
 export const machines: ReadonlyArray<Machine> = [macMachine, devMachine]
@@ -80,3 +93,5 @@ export const keyedMachines = Effect.gen(function* () {
 
 export const servicesFor = (roster: ReadonlyArray<Machine>) =>
   Layer.mergeAll(Links.layer, Presence.layer, Relays.layer, Roster.layer(roster)).pipe(Layer.provide(seededRandom))
+
+export const sidedServices = servicesFor([macMachine, devMachine, deskMachine])

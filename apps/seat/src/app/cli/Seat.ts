@@ -1,22 +1,66 @@
-import { Duration, Effect, Option } from "effect"
+import { Duration, Effect, Option, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { Notified, Opened, SecretStored, Whereabouts } from "@sth-seat/protocol/Actions.ts"
-import type { AskSecretRequest } from "@sth-seat/protocol/Actions.ts"
-import { SecretName, Title } from "@sth-seat/protocol/Ids.ts"
+import type { ActionFailed, AskSecretRequest } from "@sth-seat/protocol/Actions.ts"
+import { MachineLabel, SecretName, Title } from "@sth-seat/protocol/Ids.ts"
 import { Files } from "../../domains/files/Files.ts"
 import { localTarget } from "../../domains/files/LocalTarget.ts"
 import { Policies } from "../../domains/policy/Policies.ts"
 import { keepsSecrets } from "../../domains/policy/Policy.ts"
+import { openHere } from "../../features/local/handler.ts"
 import { askHere } from "../../features/secrets/handler.ts"
 import { platformLayer } from "../../platform/Platform.ts"
-import { askHub } from "../Hub.ts"
-import { requireIdentity } from "../Identity.ts"
-import { shareGrant } from "../Remote.ts"
+import { askDaemon, requireDaemon } from "../LocalClient.ts"
+import { machineName } from "../Identity.ts"
 import { jsonFlag, report } from "./Output.ts"
-import { hubUrlOf, settings, withHub } from "./Settings.ts"
+import { settings, warnIfUnlinked, withDaemon } from "./Settings.ts"
 import type { Settings } from "./Settings.ts"
 
 const promptWait = Duration.minutes(4)
+
+export class OpenedNowhere extends Schema.TaggedError<OpenedNowhere, { readonly brand: unique symbol }>()(
+  "OpenedNowhere",
+  { reason: Schema.String, problem: Schema.String }
+) {
+  override get message() {
+    return `${this.reason} It wasn't opened on this machine either: ${this.problem}`
+  }
+}
+
+type Showing = { readonly title: Option.Option<Title>; readonly reveal: boolean }
+
+type Here = Pick<Settings, "identity" | "session" | "handoff" | "home" | "inbox" | "secrets">
+
+const hasDisplay = (found: Here): boolean =>
+  process.platform === "darwin" || Option.isSome(found.session.waylandDisplay)
+
+const openedHereFrom = Effect.fnUntraced(function* (found: Here, target: string, showing: Showing, reason: string) {
+  if (!hasDisplay(found)) return yield* new OpenedNowhere({ reason, problem: "it has no display." })
+  const me = yield* machineName(found.identity)
+  const here = yield* openHere(target, showing.title, showing.reveal).pipe(
+    Effect.provide([
+      platformLayer({ os: process.platform, handoff: found.handoff, home: found.home, ...found.session }),
+      Files.layer(found.inbox, found.secrets)
+    ]),
+    Effect.mapError((error) => new OpenedNowhere({ reason, problem: error.message }))
+  )
+  const opened: Opened = {
+    machine: me,
+    label: MachineLabel.make(me),
+    kind: here._tag === "Url" ? "url" : "file",
+    ...(here._tag === "Url" ? { url: here.url } : {}),
+    message: `${reason} Opened it on this machine instead.`
+  }
+
+  return opened
+})
+
+const openedHereWhenOffline = (found: Here, target: string, showing: Showing) =>
+  Effect.fnUntraced(function* (failure: ActionFailed) {
+    if (failure.offline !== true) return yield* failure
+
+    return yield* openedHereFrom(found, target, showing, failure.message)
+  })
 
 const open = Command.make(
   "open",
@@ -38,21 +82,15 @@ const open = Command.make(
     json: jsonFlag
   },
   Effect.fn("Cli.open")(function* ({ target, title, reveal, json }) {
-    const found = yield* withHub
+    const found = yield* withDaemon
     const resolved = localTarget(target, process.cwd(), found.home)
-    const opened = yield* askHub(
-      found,
-      Effect.fnUntraced(function* (hub, me) {
-        const grant = resolved.startsWith("/") ? yield* Effect.asSome(shareGrant(me, resolved)) : Option.none()
-
-        return yield* hub.Open({
-          target: resolved,
-          ...(Option.isSome(title) ? { title: title.value } : {}),
-          ...(reveal ? { reveal } : {}),
-          ...(Option.isSome(grant) ? { grant: grant.value } : {})
-        })
+    const opened = yield* askDaemon(found, (daemon) =>
+      daemon.Open({
+        target: resolved,
+        ...(Option.isSome(title) ? { title: title.value } : {}),
+        ...(reveal ? { reveal } : {})
       })
-    )
+    ).pipe(Effect.catchTag("ActionFailed", openedHereWhenOffline(found, resolved, { title, reveal })))
 
     yield* report(Opened, json, opened, opened.message)
   })
@@ -66,8 +104,8 @@ const where = Command.make(
   "where",
   { json: jsonFlag },
   Effect.fn("Cli.where")(function* ({ json }) {
-    const found = yield* withHub
-    const whereabouts = yield* askHub(found, (hub) => hub.Where())
+    const found = yield* withDaemon
+    const whereabouts = yield* askDaemon(found, (daemon) => daemon.Where())
 
     yield* report(Whereabouts, json, whereabouts, whereabouts.message)
   })
@@ -89,8 +127,8 @@ const notify = Command.make(
     json: jsonFlag
   },
   Effect.fn("Cli.notify")(function* ({ message, title, json }) {
-    const found = yield* withHub
-    const notified = yield* askHub(found, (hub) => hub.Notify({ title, message }))
+    const found = yield* withDaemon
+    const notified = yield* askDaemon(found, (daemon) => daemon.Notify({ title, message }))
 
     yield* report(Notified, json, notified, notified.message)
   })
@@ -101,9 +139,10 @@ const notify = Command.make(
 )
 
 const askOnThisMachine = Effect.fnUntraced(function* (found: Settings, request: AskSecretRequest) {
-  const me = yield* requireIdentity(found.identity)
+  yield* requireDaemon(found)
+  const me = yield* machineName(found.identity)
 
-  return yield* askHere(request, me.name).pipe(
+  return yield* askHere(request, me).pipe(
     Effect.provide([
       platformLayer({ os: process.platform, handoff: found.handoff, home: found.home, ...found.session }),
       Files.layer(found.inbox, found.secrets)
@@ -112,9 +151,10 @@ const askOnThisMachine = Effect.fnUntraced(function* (found: Settings, request: 
 })
 
 const askOnSeat = Effect.fnUntraced(function* (found: Settings, request: AskSecretRequest) {
-  const hubUrl = yield* hubUrlOf(found)
+  yield* requireDaemon(found)
+  yield* warnIfUnlinked(found)
 
-  return yield* askHub({ ...found, hubUrl }, (hub) => hub.AskSecret(request), promptWait)
+  return yield* askDaemon(found, (daemon) => daemon.AskSecret(request), promptWait)
 })
 
 const askSecret = Command.make(

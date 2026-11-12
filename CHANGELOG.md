@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.8.0
+
+- The CLI never talks to the hub. Every command (`open`, `where`, `notify`, `ask-secret`, `run`, `cp`, `send`,
+  `inbox`) goes to this machine's daemon over a socket in `~/.local/state/sth-seat` (a folder only this user can
+  open), and the daemon alone reads the machine key, signs and talks to the hub. With the daemon stopped, every one
+  of them fails with "sth-seat is off on this machine" (exit 3) and sends nothing anywhere. `sth-seat doctor` no
+  longer reads the key either. Upgrade the daemon and the CLI together (`brew upgrade sth-seat`, then
+  `sth-seat install`).
+
+- Machines have a `side` in the hub's config (default `default`). `open`, `notify` and secret prompts go only to
+  the most recently used connected machine on the caller's side, never to one on another side, whichever was used
+  last. When the caller's own daemon isn't connected, the hub refuses instead of picking another machine; when the
+  daemon runs but has lost its hub link, `sth-seat open` opens on this machine itself (when it has a display). The MCP tools `open_for_user` and
+  `notify_user` now require `from`. Before, a work laptop whose daemon was off had its pages opened on a home
+  machine.
+- Every delivery says which machine it is for (`origin`), and a policy's `deliveries: from: [...]` makes the daemon
+  refuse anything for a machine not listed (itself is always allowed), or with no origin. `sth-seat doctor` shows
+  it.
+- The daemon records its hub link in `~/.local/state/sth-seat/link`. Commands that use the hub print a `warning:`
+  line when it is lost, stale (the daemon isn't running) or never made, and `sth-seat doctor` fails its `daemon`
+  check. When a daemon stays gone for 2 minutes, the hub notifies the seat on the same side.
+- The hub must be on 0.8.0 for `side` and `origin`; daemons with `deliveries` set refuse an older hub's deliveries.
+
 ## 0.7.0
 
 - Each thing the hub delivers is its own policy capability: `open-url`, `open-file`, `reveal`, `notify`,

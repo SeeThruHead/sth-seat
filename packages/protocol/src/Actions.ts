@@ -37,7 +37,8 @@ export type Whereabouts = typeof Whereabouts.Type
 export class ActionFailed extends Schema.TaggedError<ActionFailed, { readonly brand: unique symbol }>()(
   "ActionFailed",
   {
-    message: Schema.String
+    message: Schema.String,
+    offline: Schema.optionalKey(Schema.Boolean)
   }
 ) {}
 
@@ -48,7 +49,7 @@ export const openForUser = action({
   tool: "open_for_user",
   rpc: "Open",
   description:
-    "Open a URL or a file for the user on the machine they are using right now. A URL opens in that machine's browser; a file is copied there and shown in Handoff (macOS) or opened (Linux), or with `reveal` shown selected in Finder or the file manager. A localhost URL opens through a tunnel to the machine it came from, so a dev server can stay on localhost; pass `from`.",
+    "Open a URL or a file for the user on the machine they are using right now. A URL opens in that machine's browser; a file is copied there and shown in Handoff (macOS) or opened (Linux), or with `reveal` shown selected in Finder or the file manager. A localhost URL opens through a tunnel to the machine it came from, so a dev server can stay on localhost. Always pass `from`: things open only on a machine on the same side as yours.",
   request: {
     target: Target,
     title: Schema.optionalKey(
@@ -60,7 +61,7 @@ export const openForUser = action({
       })
     )
   },
-  fromAgent: { from: Schema.optionalKey(machineYouRunOn("needed for files and localhost URLs")) },
+  fromAgent: { from: machineYouRunOn("things open only on machines on its side") },
   fromMachine: { grant: Schema.optionalKey(Sealed) },
   success: Opened,
   failure: ActionFailed
@@ -92,13 +93,14 @@ export const notifyUser = action({
       description: "One or two plain sentences: what the user should know or decide"
     })
   },
-  fromAgent: {},
+  fromAgent: { from: machineYouRunOn("the notification shows only on a machine on its side") },
   fromMachine: {},
   success: Notified,
   failure: ActionFailed
 })
 
 export type NotifyRequest = typeof notifyUser.request.Type
+export type NotifyFromAgent = typeof notifyUser.agentRequest.Type
 
 export const SecretStored = Schema.Struct({ machine: MachineName, path: Schema.String, message: Schema.String })
 export type SecretStored = typeof SecretStored.Type

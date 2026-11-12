@@ -33,11 +33,14 @@ const Messages = Schema.Struct({
   clipboard: Schema.optionalKey(Schema.Boolean)
 })
 
+const Deliveries = Schema.Struct({ from: Schema.Array(MachineName) })
+
 export const PolicyFile = Schema.Struct({
   machines: Schema.Record(MachineName, PublicKeyText).pipe(Schema.withDecodingDefaultKey(Effect.succeed({}))),
   allow: Schema.Array(Rule).pipe(Schema.withDecodingDefaultKey(Effect.succeed([]))),
   secrets: Schema.optionalKey(SecretsKept),
-  messages: Schema.optionalKey(Messages)
+  messages: Schema.optionalKey(Messages),
+  deliveries: Schema.optionalKey(Deliveries)
 })
 export type PolicyFile = typeof PolicyFile.Type
 
@@ -123,11 +126,36 @@ export const hubDelivers = (policy: PolicyFile, home: string): ReadonlyArray<Rec
 const joined = (capabilities: ReadonlyArray<Received>): string =>
   capabilities.length === 0 ? "nothing" : capabilities.join(", ")
 
+const originsOf = (policy: PolicyFile, taken: ReadonlyArray<Received>): string => {
+  if (taken.length === 0) return ""
+  if (policy.deliveries === undefined) return " (for any machine)"
+
+  return ` (only for ${["this machine", ...policy.deliveries.from].join(", ")})`
+}
+
 export const deliveriesOf = (policy: PolicyFile, home: string): string => {
   const taken = hubDelivers(policy, home)
   const refused = received.filter((capability) => !taken.includes(capability))
 
-  return `the hub may ${joined(taken)}; refused: ${joined(refused)}`
+  return `the hub may ${joined(taken)}${originsOf(policy, taken)}; refused: ${joined(refused)}`
+}
+
+export const deliveryRefusal = (
+  policy: PolicyFile,
+  origin: MachineName | undefined,
+  me: MachineName
+): Option.Option<string> => {
+  if (policy.deliveries === undefined) return Option.none()
+  if (origin === me) return Option.none()
+  if (origin === undefined)
+    return Option.some(
+      "The hub didn't say which machine this came from, and this machine's policy takes deliveries only from the machines under deliveries: from (~/.config/sth-seat/policy.yaml)."
+    )
+  if (policy.deliveries.from.includes(origin)) return Option.none()
+
+  return Option.some(
+    `This machine's policy takes nothing the hub delivers for ${origin}; only for the machines under deliveries: from (~/.config/sth-seat/policy.yaml).`
+  )
 }
 
 export const keepsSecrets = (policy: PolicyFile): boolean => policy.secrets === "here"

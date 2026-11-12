@@ -1,4 +1,4 @@
-import { Console, Duration, Effect, FileSystem, Option, Path, Record, Result, Schema } from "effect"
+import { Console, DateTime, Duration, Effect, FileSystem, Option, Path, Record, Result, Schema } from "effect"
 import { Command, Flag } from "effect/cli"
 import { MachineName } from "@sth-seat/protocol/Ids.ts"
 import { telemetryLayer } from "@sth-seat/protocol/Telemetry.ts"
@@ -6,6 +6,7 @@ import { Audit, AuditEntry } from "../../domains/audit/Audit.ts"
 import { Checks, fail, healthy, lineOf, ok, toolCheck, warn } from "../../domains/doctor/Doctor.ts"
 import type { Check } from "../../domains/doctor/Doctor.ts"
 import { Files } from "../../domains/files/Files.ts"
+import { linkProblem } from "../../domains/link/Link.ts"
 import { Policies } from "../../domains/policy/Policies.ts"
 import { deliveriesOf } from "../../domains/policy/Policy.ts"
 import { brewStablePath, isBunRuntime } from "../../domains/service/Service.ts"
@@ -15,11 +16,10 @@ import { Ports } from "../../platform/Ports.ts"
 import { Shell } from "../../platform/Shell.ts"
 import { onPath } from "../../platform/Tools.ts"
 import { daemon } from "../Daemon.ts"
-import { askHub } from "../Hub.ts"
-import { issueKey, readIdentity } from "../Identity.ts"
-import type { Identity } from "../Identity.ts"
+import { issueKey, machineName } from "../Identity.ts"
+import { askDaemon, requireDaemon } from "../LocalClient.ts"
 import { jsonFlag, report } from "./Output.ts"
-import { hubUrlOf, machineLayers, settings, withHub } from "./Settings.ts"
+import { hubUrlOf, linkState, machineLayers, settings, withHub } from "./Settings.ts"
 import type { Settings } from "./Settings.ts"
 
 export const daemonCommand = (version: string) =>
@@ -30,7 +30,10 @@ export const daemonCommand = (version: string) =>
       const found = yield* withHub
       const remote = { home: found.home, maxRun: Duration.hours(24) }
 
-      return yield* daemon({ hubUrl: found.hubUrl, identity: found.identity, remote }, version).pipe(
+      return yield* daemon(
+        { hubUrl: found.hubUrl, identity: found.identity, remote, stateDir: found.stateDir },
+        version
+      ).pipe(
         Effect.provide([
           platformLayer({ os: process.platform, handoff: found.handoff, home: found.home, ...found.session }),
           Files.layer(found.inbox, found.secrets),
@@ -194,26 +197,41 @@ export class SetupIncomplete extends Schema.TaggedError<SetupIncomplete, { reado
   }
 }
 
-const identityCheck = (found: Option.Option<Identity>): Check =>
-  Option.match(found, {
-    onNone: () => fail("key", "no key yet; run `sth-seat key --name <this machine> --hub wss://<your hub>/daemon`"),
-    onSome: (me) => ok("key", `${me.name}, public key ${me.publicText}`)
-  })
+const keyCheck = Effect.fnUntraced(function* (found: Settings) {
+  const fs = yield* FileSystem.FileSystem
+  const name = yield* machineName(found.identity).pipe(Effect.result)
+  const present = yield* fs.exists(found.identity.keyFile).pipe(Effect.orElseSucceed(() => false))
+  if (!present || Result.isFailure(name))
+    return fail("key", "no key yet; run `sth-seat key --name <this machine> --hub wss://<your hub>/daemon`")
 
-const hubLinkChecks = Effect.fnUntraced(function* (found: Settings, hubUrl: string, me: Identity) {
-  const whereabouts = yield* askHub({ hubUrl, identity: found.identity }, (hub) => hub.Where()).pipe(
-    Effect.timeout("15 seconds"),
-    Effect.result
-  )
-  if (Result.isFailure(whereabouts)) return [fail("hub", `${hubUrl}: ${whereabouts.failure.message}`)]
+  return ok("key", `${name.success}; only the daemon reads ${found.identity.keyFile}`)
+})
 
-  const here = whereabouts.success.machines.find((machine) => machine.name === me.name)
-  const daemonCheck =
-    here?.online === true
-      ? ok("daemon", "connected to the hub")
-      : warn("daemon", "not connected; start it (systemctl --user start sth-seat, or launchctl on macOS)")
+const unseen = "the hub doesn't see it; restart it with `sth-seat install`."
 
-  return [ok("hub", `${hubUrl}: ${whereabouts.success.message}`), daemonCheck]
+const localProblem = Effect.fnUntraced(function* (found: Settings) {
+  const state = yield* linkState(found)
+  const now = yield* DateTime.now
+
+  return linkProblem(state, now)
+})
+
+const hubLinkChecks = Effect.fnUntraced(function* (found: Settings, hubUrl: string) {
+  const running = yield* requireDaemon(found).pipe(Effect.result)
+  if (Result.isFailure(running)) return [fail("daemon", running.failure.message)]
+  const whereabouts = yield* askDaemon(found, (local, me) =>
+    Effect.map(local.Where(), (where) => ({ where, me }))
+  ).pipe(Effect.timeout("15 seconds"), Effect.result)
+  const problem = yield* localProblem(found)
+  const why = Option.getOrElse(problem, () => unseen)
+  if (Result.isFailure(whereabouts))
+    return [fail("hub", `${hubUrl}: ${whereabouts.failure.message}`), fail("daemon", `running, but ${why}`)]
+
+  const { where, me } = whereabouts.success
+  const online = where.machines.some((machine) => machine.name === me && machine.online)
+  const daemonCheck = online ? ok("daemon", "running and connected to the hub") : fail("daemon", `running, but ${why}`)
+
+  return [ok("hub", `${hubUrl}: ${where.message}`), daemonCheck]
 })
 
 const policyCheck = Effect.fnUntraced(function* (found: Settings) {
@@ -237,22 +255,11 @@ const policyCheck = Effect.fnUntraced(function* (found: Settings) {
 
 const doctorChecks = Effect.fnUntraced(function* () {
   const found = yield* settings
-  const identity = yield* readIdentity(found.identity).pipe(Effect.result)
-  const identityResult = Result.match(identity, {
-    onFailure: (problem) => fail("key", problem.message),
-    onSuccess: identityCheck
-  })
+  const identityResult = yield* keyCheck(found)
   const hubUrl = yield* hubUrlOf(found).pipe(Effect.result)
-  const me = Result.isSuccess(identity) ? identity.success : Option.none<Identity>()
-  const linkChecks =
-    Result.isSuccess(hubUrl) && Option.isSome(me)
-      ? yield* hubLinkChecks(found, hubUrl.success, me.value)
-      : [
-          Result.match(hubUrl, {
-            onFailure: (missing) => fail("hub", missing.message),
-            onSuccess: (url) => warn("hub", `${url}: not tried without a key`)
-          })
-        ]
+  const linkChecks = Result.isSuccess(hubUrl)
+    ? yield* hubLinkChecks(found, hubUrl.success)
+    : [fail("hub", hubUrl.failure.message)]
   const policy = yield* policyCheck(found)
   const locked = yield* Audit.use((audit) => audit.isLocked).pipe(Effect.provide(Audit.layer(found.stateDir)))
   const lockCheck = locked ? warn("lock", "locked; run `sth-seat unlock`") : ok("lock", "taking commands")

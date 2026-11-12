@@ -1,14 +1,15 @@
 import { assert, describe, it } from "@effect/vitest"
-import { DateTime, Option } from "effect"
+import { DateTime, Option, Result } from "effect"
 import { MachineLabel, MachineName } from "@sth-seat/protocol/Ids.ts"
-import { ago, nobodyConnected, seatOf, whereaboutsOf } from "./Seat.ts"
+import { ago, nobodyConnected, seatFor, seatOf, whereaboutsOf } from "./Seat.ts"
 import type { Sighting } from "./Seat.ts"
 
 const at = (seconds: number) => DateTime.makeUnsafe(seconds * 1000)
 
-const sighting = (name: string, online: boolean, lastInput?: number): Sighting => ({
+const sighting = (name: string, online: boolean, lastInput?: number, side = "home"): Sighting => ({
   name: MachineName.make(name),
   label: MachineLabel.make(name.toUpperCase()),
+  side,
   online,
   lastInput: lastInput === undefined ? Option.none() : Option.some(at(lastInput))
 })
@@ -93,5 +94,37 @@ describe("whereaboutsOf", () => {
 
   it("never reports negative idle time for input stamped after now", () => {
     assert.strictEqual(whereaboutsOf([sighting("mac", true, 1005)], at(1000)).machines[0]?.idleSeconds, 0)
+  })
+})
+
+const seatNameFor = (sightings: ReadonlyArray<Sighting>, caller: string) =>
+  Result.map(seatFor(sightings, MachineName.make(caller)), (found): string => found.name)
+
+describe("seatFor", () => {
+  it("is the most recently used connected machine on the caller's side, never one on another side", () => {
+    const sightings = [
+      sighting("mac", true, 100, "home"),
+      sighting("dev", true, 50, "home"),
+      sighting("work", true, 200, "work")
+    ]
+
+    assert.deepStrictEqual(seatNameFor(sightings, "dev"), Result.succeed("mac"))
+    assert.deepStrictEqual(seatNameFor(sightings, "work"), Result.succeed("work"))
+  })
+
+  it("is the caller itself when nothing on its side has input yet", () => {
+    assert.deepStrictEqual(
+      seatNameFor([sighting("dev", true), sighting("work", true, 200, "work")], "dev"),
+      Result.succeed("dev")
+    )
+  })
+
+  it("refuses to pick another machine when the caller isn't connected or isn't known", () => {
+    const sightings = [sighting("mac", true, 100), sighting("work", false, 10, "work")]
+    const offline = seatFor(sightings, MachineName.make("work"))
+    const unknown = seatFor(sightings, MachineName.make("stranger"))
+
+    assert.isTrue(Result.isFailure(offline) && offline.failure.includes("WORK isn't connected to the hub"))
+    assert.deepStrictEqual(unknown, Result.fail("The hub doesn't know stranger."))
   })
 })

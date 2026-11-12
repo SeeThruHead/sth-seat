@@ -8,6 +8,7 @@ import {
   decide,
   defaultPolicy,
   deliveriesOf,
+  deliveryRefusal,
   hubDelivers,
   received,
   expandHome,
@@ -95,10 +96,37 @@ describe("policy", () => {
     assert.deepStrictEqual(
       [oneWay, Schema.decodeSync(PolicyFile)({ allow: [] }), defaultPolicy].map((policy) => deliveriesOf(policy, home)),
       [
-        "the hub may open-url, open-file, reveal, notify; refused: ask-secret, store-secret, open-tunnelled-page",
+        "the hub may open-url, open-file, reveal, notify (for any machine); refused: ask-secret, store-secret, open-tunnelled-page",
         "the hub may nothing; refused: open-url, open-file, reveal, notify, ask-secret, store-secret, open-tunnelled-page",
-        "the hub may open-url, open-file, reveal, notify, ask-secret, store-secret, open-tunnelled-page; refused: nothing"
+        "the hub may open-url, open-file, reveal, notify, ask-secret, store-secret, open-tunnelled-page (for any machine); refused: nothing"
       ]
+    )
+  })
+
+  it("takes deliveries only for this machine and those under deliveries: from, when the policy names them", () => {
+    const work = MachineName.make("work")
+    const sided = Schema.decodeSync(PolicyFile)({
+      allow: [{ from: [hub], can: ["receive"] }],
+      deliveries: { from: [cube] }
+    })
+    const open = Schema.decodeSync(PolicyFile)({ allow: [{ from: [hub], can: ["receive"] }] })
+
+    assert.deepStrictEqual(
+      [work, cube, tower, undefined].map((origin) => Option.isNone(deliveryRefusal(sided, origin, work))),
+      [true, true, false, false]
+    )
+    assert.include(
+      Option.getOrElse(deliveryRefusal(sided, tower, work), () => ""),
+      "nothing the hub delivers for tower"
+    )
+    assert.include(
+      Option.getOrElse(deliveryRefusal(sided, undefined, work), () => ""),
+      "didn't say which machine"
+    )
+    assert.isTrue(Option.isNone(deliveryRefusal(open, undefined, work)))
+    assert.strictEqual(
+      deliveriesOf(sided, home),
+      "the hub may open-url, open-file, reveal, notify, ask-secret, store-secret, open-tunnelled-page (only for this machine, cube); refused: nothing"
     )
   })
 

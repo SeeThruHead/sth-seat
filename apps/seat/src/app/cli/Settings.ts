@@ -1,6 +1,8 @@
-import { Config, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
+import { Config, Console, DateTime, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import { secretsFolder } from "@sth-seat/protocol/Daemon.ts"
 import { Audit } from "../../domains/audit/Audit.ts"
+import { Link, linkProblem } from "../../domains/link/Link.ts"
+import { requireDaemon } from "../LocalClient.ts"
 import { Messages } from "../../domains/messages/Messages.ts"
 import { Policies } from "../../domains/policy/Policies.ts"
 
@@ -69,4 +71,26 @@ export const withHub = Effect.gen(function* () {
 })
 
 export const machineLayers = (found: Pick<Settings, "policyFile" | "stateDir">) =>
-  Layer.mergeAll(Policies.layer(found.policyFile), Audit.layer(found.stateDir), Messages.layer(found.stateDir))
+  Layer.mergeAll(
+    Policies.layer(found.policyFile),
+    Audit.layer(found.stateDir),
+    Messages.layer(found.stateDir),
+    Link.layer(found.stateDir)
+  )
+
+export const linkState = (found: Pick<Settings, "stateDir">) =>
+  Link.use((link) => link.state).pipe(Effect.provide(Link.layer(found.stateDir)))
+
+export const warnIfUnlinked = Effect.fnUntraced(function* (found: Pick<Settings, "stateDir">) {
+  const state = yield* linkState(found)
+  const now = yield* DateTime.now
+  const problem = linkProblem(state, now)
+  if (Option.isNone(problem)) return
+
+  yield* Console.error(`warning: ${problem.value}`)
+})
+
+export const withDaemon = settings.pipe(
+  Effect.tap((found) => requireDaemon(found)),
+  Effect.tap(warnIfUnlinked)
+)

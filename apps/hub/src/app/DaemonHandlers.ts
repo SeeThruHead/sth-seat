@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, FiberSet, Stream } from "effect"
 import type { Signature } from "effect/crypto"
 import { ConnectedMachine, DaemonRpcs } from "@sth-seat/protocol/Daemon.ts"
 import type { MachineName } from "@sth-seat/protocol/Ids.ts"
@@ -6,11 +6,11 @@ import { Links } from "../domains/links/Links.ts"
 import { Presence } from "../domains/presence/Presence.ts"
 import { Relays } from "../domains/relays/Relays.ts"
 import { Roster } from "../domains/roster/Roster.ts"
-import { notify } from "../features/notify/handler.ts"
+import { linkLost, notify } from "../features/notify/handler.ts"
 import { open } from "../features/open/handler.ts"
 import { relay, relayMore, reply } from "../features/relay/handler.ts"
 import { askSecretFromMachine } from "../features/secret/handler.ts"
-import { where } from "../features/where/handler.ts"
+import { knownMachine, where } from "../features/where/handler.ts"
 
 type HubServices = Roster | Links | Presence | Relays | Signature.Signature
 
@@ -18,16 +18,21 @@ export const DaemonHandlers = DaemonRpcs.toLayer(
   Effect.gen(function* () {
     const links = yield* Links
     const presence = yield* Presence
-    const roster = yield* Roster
     const relays = yield* Relays
     const context = yield* Effect.context<HubServices>()
+    const watching = yield* FiberSet.make()
 
     const asCaller = <A, E>(handle: (caller: MachineName) => Effect.Effect<A, E, HubServices>) =>
       ConnectedMachine.use((machine) => handle(machine.name).pipe(Effect.provideContext(context)))
 
+    const left = (caller: MachineName) =>
+      relays
+        .machineLeft(caller)
+        .pipe(Effect.andThen(FiberSet.run(watching, linkLost(caller).pipe(Effect.provideContext(context)))))
+
     const attach = (caller: MachineName, version: string) =>
       Effect.logInfo("daemon attached", { machine: caller, version }).pipe(
-        Effect.as(links.attach(caller).pipe(Stream.ensuring(relays.machineLeft(caller))))
+        Effect.as(links.attach(caller).pipe(Stream.ensuring(left(caller))))
       )
 
     return DaemonRpcs.of({
@@ -44,11 +49,11 @@ export const DaemonHandlers = DaemonRpcs.toLayer(
 
       Answer: ({ id, outcome }) => links.answer(id, outcome),
 
-      Open: (request) => asCaller((caller) => open(request, roster.find(caller))),
+      Open: (request) => asCaller((caller) => Effect.flatMap(knownMachine(caller), (from) => open(request, from))),
 
       Where: () => where.pipe(Effect.provideContext(context)),
 
-      Notify: (request) => notify(request).pipe(Effect.provideContext(context)),
+      Notify: (request) => asCaller((caller) => Effect.flatMap(knownMachine(caller), (from) => notify(request, from))),
 
       AskSecret: (request) => asCaller((caller) => askSecretFromMachine(request, caller)),
 

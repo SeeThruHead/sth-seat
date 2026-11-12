@@ -26,7 +26,9 @@ It runs on macOS and Linux (Wayland compositors such as Hyprland). Windows is no
 
 ## How it works
 
-Daemons connect out to the hub over a WebSocket; no machine opens a port. Each machine has an Ed25519 key pair,
+Daemons connect out to the hub over a WebSocket; no machine opens a port. The `sth-seat` commands talk only to
+their own machine's daemon, over a socket only that user can reach, and the daemon alone uses the machine's key and
+the hub. When the daemon is stopped, sth-seat is off on that machine: every command fails and nothing is sent. Each machine has an Ed25519 key pair,
 and the hub's config lists only public keys. Commands between machines are signed by the sender and checked by
 the receiver against the key its own policy pins, so the hub routes them but can't make them up or fake their
 output. See `docs/architecture.md` for every decision.
@@ -61,7 +63,13 @@ machines:
     hostnames: [my-laptop]
     publicKey: <from sth-seat key>
     secrets: here                  # optional: secrets asked from this machine stay on it (see below)
+    side: work                     # optional (default `default`): see below
 ```
+
+Each machine is on a `side`. Pages, files, notifications and secret prompts go only to the most recently used
+connected machine on the caller's side, never across, and never to another machine when the caller's own daemon
+isn't connected (then `sth-seat open` opens on the calling machine itself). Give a work laptop its own side so
+nothing of it lands on a home machine and nothing from home lands on it. The MCP tools need `from` for this.
 
 To make the MCP token and its hash:
 
@@ -125,6 +133,11 @@ printf %s "$token" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -
    or anything else (`.app`, `.command`, `.webloc`, `.terminal`, `.py` and the like) is refused, since the
    system opener would run it. Those can still be revealed.
 
+   `deliveries` (a top-level key next to `allow`) checks the hub's side rule on this machine too: with
+   `deliveries: from: [desktop]`, the daemon takes what the hub delivers only for this machine and `desktop`, and
+   refuses anything for another machine or that doesn't say which machine it is for. List the machines on this
+   machine's side.
+
    `messages` (a top-level key next to `allow`) says which machines may send this one messages, separately from
    what they may run:
 
@@ -159,7 +172,8 @@ printf %s "$token" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -
 ## Check a machine
 
 `sth-seat doctor` checks the key, the hub and the daemon's link to it, the policy, the lock and the desktop
-tools this OS needs, and says how to fix whatever fails.
+tools this OS needs, and says how to fix whatever fails. Any command that uses the hub prints a `warning:` line
+when this machine's daemon has lost its link or isn't running.
 
 ## Connect your agents
 
@@ -175,9 +189,9 @@ to an MCP router. The tools:
 
 | Tool | What it does |
 | --- | --- |
-| `open_for_user` | Opens a URL or a file on the seat. Pass `from` (the agent machine's hostname) for files and localhost URLs, and `reveal` to show a file selected in Finder or the file manager instead of opening it. |
+| `open_for_user` | Opens a URL or a file on the seat. Pass `from` (the agent machine's hostname, required: it picks the side), and `reveal` to show a file selected in Finder or the file manager instead of opening it. |
 | `where_is_user` | Which machine is the seat, and how long since each was used. |
-| `notify_user` | Shows a desktop notification on the seat. |
+| `notify_user` | Shows a desktop notification on the seat of the `from` machine's side. |
 | `ask_user_secret` | Asks for a secret in a hidden prompt on the seat; it's written to a mode-600 file on the agent's machine and only the path is returned. |
 
 From a shell on any machine:

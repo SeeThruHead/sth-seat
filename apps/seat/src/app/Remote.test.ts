@@ -16,7 +16,7 @@ import { freshSeen, relayed } from "../features/remote/handler.ts"
 import { Ports } from "../platform/Ports.ts"
 import { Shell } from "../platform/Shell.ts"
 import { machineIn, recordingDesktop, writePolicy } from "../testing/Seat.testing.ts"
-import { download, linkTo, outcomeOf, runOn, sendMessage, upload } from "./Remote.ts"
+import { download, linkTo, outcomeOf, runOn, sendMessage, throughHub, upload } from "./Remote.ts"
 
 const cube = MachineName.make("cube")
 
@@ -129,7 +129,7 @@ describe("sth-seat run", () => {
     fromDev(
       Effect.fnUntraced(function* (machines, written) {
         const hub = yield* hubClient
-        const link = yield* linkTo(hub, devIdentity(machines), cube)
+        const link = yield* linkTo(throughHub(hub, devIdentity(machines)), devIdentity(machines).name, cube)
         const exit = yield* Effect.exit(
           runOn(link, {
             command: "echo hi; exit 3",
@@ -153,7 +153,7 @@ describe("sth-seat run", () => {
     fromDev(
       Effect.fnUntraced(function* (machines, written) {
         const hub = yield* hubClient
-        const link = yield* linkTo(hub, devIdentity(machines), cube)
+        const link = yield* linkTo(throughHub(hub, devIdentity(machines)), devIdentity(machines).name, cube)
         yield* runOn(link, {
           command: "cat",
           cwd: Option.some(RemotePath.make("~")),
@@ -185,7 +185,9 @@ describe("sth-seat run", () => {
     fromDev(
       Effect.fnUntraced(function* (machines) {
         const hub = yield* hubClient
-        const error = yield* Effect.flip(linkTo(hub, devIdentity(machines), MachineName.make("work-mac")))
+        const error = yield* Effect.flip(
+          linkTo(throughHub(hub, devIdentity(machines)), devIdentity(machines).name, MachineName.make("work-mac"))
+        )
 
         assert.include(error.message, "doesn't know work-mac's key")
       })
@@ -201,12 +203,12 @@ describe("sth-seat cp", () => {
         const hub = yield* hubClient
         const local = `${machines.root}/dev/notes.txt`
         yield* fs.writeFileString(local, "x".repeat(600_000))
-        const up = yield* linkTo(hub, devIdentity(machines), cube)
+        const up = yield* linkTo(throughHub(hub, devIdentity(machines)), devIdentity(machines).name, cube)
         const sent = yield* upload(up, local, RemotePath.make("~/notes.txt")).pipe(Effect.scoped)
-        const down = yield* linkTo(hub, devIdentity(machines), cube)
+        const down = yield* linkTo(throughHub(hub, devIdentity(machines)), devIdentity(machines).name, cube)
         const received = yield* download(down, RemotePath.make("~/notes.txt"), `${machines.root}/dev/back.txt`)
         const back = yield* fs.readFileString(`${machines.root}/dev/back.txt`)
-        const missing = yield* linkTo(hub, devIdentity(machines), cube).pipe(
+        const missing = yield* linkTo(throughHub(hub, devIdentity(machines)), devIdentity(machines).name, cube).pipe(
           Effect.flatMap((link) => download(link, RemotePath.make("~/gone.txt"), `${machines.root}/dev/gone.txt`)),
           Effect.flip
         )
@@ -233,7 +235,7 @@ describe("sth-seat send", () => {
     fromDev(
       Effect.fnUntraced(function* (machines) {
         const hub = yield* hubClient
-        const refused = yield* linkTo(hub, devIdentity(machines), cube).pipe(
+        const refused = yield* linkTo(throughHub(hub, devIdentity(machines)), devIdentity(machines).name, cube).pipe(
           Effect.flatMap((link) => sendMessage(link, "hello")),
           Effect.flip
         )
@@ -241,7 +243,7 @@ describe("sth-seat send", () => {
           `${machines.root}/mac`,
           `machines:\n  tower: ${machines.devText}\nmessages:\n  from: [tower]\n`
         )
-        const bytes = yield* linkTo(hub, devIdentity(machines), cube).pipe(
+        const bytes = yield* linkTo(throughHub(hub, devIdentity(machines)), devIdentity(machines).name, cube).pipe(
           Effect.flatMap((link) => sendMessage(link, "hello"))
         )
         const inbox = yield* Messages.use((messages) => messages.unread).pipe(

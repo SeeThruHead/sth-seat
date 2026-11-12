@@ -5,7 +5,7 @@ import { machineCommands } from "./cli/Machines.ts"
 import { messageCommands } from "./cli/Messages.ts"
 import { seatCommands } from "./cli/Seat.ts"
 
-export const version = "0.7.0"
+export const version = "0.8.0"
 
 export const cli = Command.make("sth-seat").pipe(
   Command.withDescription(

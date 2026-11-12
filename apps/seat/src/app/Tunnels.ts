@@ -8,7 +8,7 @@ import { Ports } from "../platform/Ports.ts"
 import type { Pipe } from "../platform/Ports.ts"
 import type { HubClient } from "./Hub.ts"
 import type { Identity } from "./Identity.ts"
-import { linkTo, outcomeOf, sendInput, start, whenStarted } from "./Remote.ts"
+import { linkTo, outcomeOf, sendInput, start, throughHub, whenStarted } from "./Remote.ts"
 
 export const tunnelsLayer = (hub: HubClient, me: Identity) =>
   Layer.effect(
@@ -21,7 +21,7 @@ export const tunnelsLayer = (hub: HubClient, me: Identity) =>
 
       const serve = (origin: MachineName, port: Port) => (pipe: Pipe) =>
         Effect.gen(function* () {
-          const link = yield* linkTo(hub, me, origin)
+          const link = yield* linkTo(throughHub(hub, me), me.name, origin)
           const feed = whenStarted(sendInput(link, pipe.incoming))
 
           yield* start(link, { _tag: "Tunnel", port }).pipe(

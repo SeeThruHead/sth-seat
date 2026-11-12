@@ -28,8 +28,8 @@ describe("askSecret", () => {
       assert.strictEqual(stored.path, "/home/user/.local/share/sth-seat/secrets/plex-token")
       assert.notInclude(`${stored.path} ${stored.message} ${stored.machine}`, "s3cret")
       assert.deepStrictEqual(
-        macSaw.map((command) => (command._tag === "AskSecret" ? command.destination : command._tag)),
-        [{ machine: devMachine.label, file: "~/.local/share/sth-seat/secrets/plex-token" }]
+        macSaw.map((command) => (command._tag === "AskSecret" ? [command.destination, command.origin] : [])),
+        [[{ machine: devMachine.label, file: "~/.local/share/sth-seat/secrets/plex-token" }, tower]]
       )
       assert.deepStrictEqual(
         devSaw.map((command) => (command._tag === "StoreSecret" ? Redacted.value(command.value) : command._tag)),
@@ -46,11 +46,12 @@ describe("askSecret", () => {
         yield* fakeDaemon(cube, (command) =>
           command._tag === "AskSecret" ? { _tag: "Refused", reason: "The user cancelled" } : done
         )
+        yield* fakeDaemon(tower)
         yield* sitAt(cube)
         const cancelled = yield* Effect.flip(askSecret(request, devMachine))
         const unknown = yield* Effect.flip(askSecretFromAgent({ ...request, from: Hostname.make("nowhere") }))
 
-        assert.include(nobody.message, "None of the user's machines")
+        assert.include(nobody.message, "Tower isn't connected to the hub")
         assert.include(cancelled.message, "The user cancelled")
         assert.include(unknown.message, "doesn't know a machine called nowhere")
       }).pipe(Effect.scoped, Effect.provide(hubServices))
@@ -59,9 +60,9 @@ describe("askSecret", () => {
   it.effect("fails when the seat or the asking machine answers with something else", () =>
     Effect.gen(function* () {
       yield* fakeDaemon(cube)
+      yield* fakeDaemon(tower)
       yield* sitAt(cube)
       const odd = yield* Effect.flip(askSecret(request, devMachine))
-      yield* fakeDaemon(tower)
       const oddStore = yield* Effect.flip(askSecret(request, { ...devMachine, name: cube }))
 
       assert.include(odd.message, "where SecretGiven was expected")

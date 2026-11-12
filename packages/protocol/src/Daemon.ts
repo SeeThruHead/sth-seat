@@ -19,13 +19,16 @@ import {
 import { Port, SessionId } from "./Remote.ts"
 import { Sealed } from "./Sealed.ts"
 
-export const OpenUrl = Schema.TaggedStruct("OpenUrl", { id: CommandId, url: WebUrl })
+const origin = { origin: Schema.optionalKey(MachineName) }
+
+export const OpenUrl = Schema.TaggedStruct("OpenUrl", { id: CommandId, url: WebUrl, ...origin })
 
 export const OpenFile = Schema.TaggedStruct("OpenFile", {
   id: CommandId,
   path: FilePath,
   title: Schema.optionalKey(Title),
-  reveal: Schema.optionalKey(Schema.Boolean)
+  reveal: Schema.optionalKey(Schema.Boolean),
+  ...origin
 })
 
 export const ReadFile = Schema.TaggedStruct("ReadFile", {
@@ -39,7 +42,8 @@ export const ReceiveFile = Schema.TaggedStruct("ReceiveFile", {
   name: FileName,
   bytes: FileBytes,
   title: Schema.optionalKey(Title),
-  reveal: Schema.optionalKey(Schema.Boolean)
+  reveal: Schema.optionalKey(Schema.Boolean),
+  ...origin
 })
 
 export const OpenTunnel = Schema.TaggedStruct("OpenTunnel", {
@@ -50,7 +54,7 @@ export const OpenTunnel = Schema.TaggedStruct("OpenTunnel", {
   path: Schema.String.check(Schema.isPattern(/^\//), Schema.isMaxLength(8192))
 })
 
-export const Notify = Schema.TaggedStruct("Notify", { id: CommandId, ...notifyUser.request.fields })
+export const Notify = Schema.TaggedStruct("Notify", { id: CommandId, ...notifyUser.request.fields, ...origin })
 
 export const secretsFolder = [".local", "share", "sth-seat", "secrets"] as const
 
@@ -68,7 +72,8 @@ export type SecretDestination = typeof SecretDestination.Type
 export const AskSecret = Schema.TaggedStruct("AskSecret", {
   id: CommandId,
   ...askUserSecret.request.fields,
-  destination: Schema.optionalKey(SecretDestination)
+  destination: Schema.optionalKey(SecretDestination),
+  ...origin
 })
 
 export const StoreSecret = Schema.TaggedStruct("StoreSecret", { id: CommandId, name: SecretName, value: SecretValue })

@@ -6,7 +6,7 @@ import { askUserSecret, notifyUser, openForUser, whereIsUser } from "@sth-seat/p
 import { Links } from "../domains/links/Links.ts"
 import { Presence } from "../domains/presence/Presence.ts"
 import { Roster } from "../domains/roster/Roster.ts"
-import { notify } from "../features/notify/handler.ts"
+import { notifyFromAgent } from "../features/notify/handler.ts"
 import { openFromAgent } from "../features/open/handler.ts"
 import { askSecretFromAgent } from "../features/secret/handler.ts"
 import { where } from "../features/where/handler.ts"
@@ -24,7 +24,7 @@ const handlers = SeatToolkit.toLayer(
     return SeatToolkit.of({
       open_for_user: (request) => openFromAgent(request).pipe(Effect.provideContext(context)),
       where_is_user: () => where.pipe(Effect.provideContext(context)),
-      notify_user: (request) => notify(request).pipe(Effect.provideContext(context)),
+      notify_user: (request) => notifyFromAgent(request).pipe(Effect.provideContext(context)),
       ask_user_secret: (request) => askSecretFromAgent(request).pipe(Effect.provideContext(context))
     })
   })

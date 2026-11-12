@@ -9,6 +9,7 @@ export type Machine = {
   readonly hostnames: ReadonlyArray<Hostname>
   readonly publicKey: Option.Option<PublicKeyText>
   readonly secrets: SecretsKept
+  readonly side: string
 }
 
 const normalized = (hostname: string): string =>

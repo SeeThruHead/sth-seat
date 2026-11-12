@@ -1,9 +1,11 @@
 import { Duration, Effect, Layer, Option, Ref, Schedule, Stream } from "effect"
+import { localSocketName } from "@sth-seat/protocol/Local.ts"
 import { RpcClient } from "effect/rpc"
 import { DaemonRpcs } from "@sth-seat/protocol/Daemon.ts"
 import type { Sealed } from "@sth-seat/protocol/Sealed.ts"
 import type { HubCommand } from "@sth-seat/protocol/Daemon.ts"
 import { Me } from "../domains/identity/Me.ts"
+import { Link } from "../domains/link/Link.ts"
 import { problemOf } from "../domains/problem/Problem.ts"
 import { Sessions } from "../domains/sessions/Sessions.ts"
 import { execute } from "../features/commands/handler.ts"
@@ -12,6 +14,9 @@ import { aborted, freshSeen, relayed } from "../features/remote/handler.ts"
 import type { RemoteSettings } from "../features/remote/handler.ts"
 import { Idle } from "../platform/Idle.ts"
 import { hubFor } from "./Hub.ts"
+import type { HubClient } from "./Hub.ts"
+import { localServer } from "./LocalServer.ts"
+import type { HubSlot } from "./LocalServer.ts"
 import { tunnelsLayer } from "./Tunnels.ts"
 import { requireIdentity } from "./Identity.ts"
 import type { Identity, IdentityFiles } from "./Identity.ts"
@@ -22,6 +27,7 @@ export type DaemonSettings = {
   readonly hubUrl: string
   readonly identity: IdentityFiles
   readonly remote: RemoteSettings
+  readonly stateDir: string
 }
 
 const repeatedWarnings = Effect.map(Ref.make(Option.none<string>()), (last) => ({
@@ -32,8 +38,14 @@ const repeatedWarnings = Effect.map(Ref.make(Option.none<string>()), (last) => (
   clear: Ref.set(last, Option.none())
 }))
 
-const session = Effect.fn("Daemon.session")(function* (settings: DaemonSettings, identity: Identity, version: string) {
+const session = Effect.fn("Daemon.session")(function* (
+  settings: DaemonSettings,
+  identity: Identity,
+  version: string,
+  slot: HubSlot
+) {
   const idle = yield* Idle
+  const link = yield* Link
   const hub = yield* RpcClient.make(DaemonRpcs)
   const tunnels = yield* Layer.build(tunnelsLayer(hub, identity))
   const seen = yield* freshSeen
@@ -65,14 +77,16 @@ const session = Effect.fn("Daemon.session")(function* (settings: DaemonSettings,
 
   const reports = idle.current.pipe(
     Effect.flatMap((current) => Effect.andThen(warnings.clear, hub.Presence({ idle: current }))),
-    Effect.catchTag("IdleUnavailable", (error) => warnings.warn(error.message)),
+    Effect.catchTag("IdleUnavailable", (error) => Effect.andThen(warnings.warn(error.message), hub.Where())),
+    Effect.andThen(link.connected),
     Effect.delay(reportEvery),
     Effect.forever
   )
 
   yield* Effect.logInfo("connecting to the hub", { hub: settings.hubUrl, version })
+  yield* Ref.set(slot, Option.some(hub))
 
-  return yield* Effect.raceFirst(commands, reports)
+  return yield* Effect.raceFirst(commands, reports).pipe(Effect.ensuring(Ref.set(slot, Option.none())))
 })
 
 const backoff = Schedule.exponential("1 second").pipe(
@@ -84,19 +98,25 @@ const meOf = (identity: Identity) =>
 
 export const daemon = Effect.fn("Daemon.daemon")(function* (settings: DaemonSettings, version: string) {
   const identity = yield* requireIdentity(settings.identity)
+  const link = yield* Link
+  const slot: HubSlot = yield* Ref.make(Option.none<HubClient>())
+  const socket = `${settings.stateDir}/${localSocketName}`
+  yield* Layer.launch(localServer(settings.stateDir, socket, slot, identity)).pipe(
+    Effect.tapCause((cause) => Effect.logError("can't serve sth-seat commands on this machine", cause)),
+    Effect.forkScoped
+  )
 
-  return yield* session(settings, identity, version).pipe(
+  return yield* session(settings, identity, version, slot).pipe(
     Effect.provide([hubFor(settings.hubUrl, identity), Sessions.layer]),
     Effect.scoped,
-    Effect.tapCause((cause) =>
-      Effect.logWarning(
-        "hub link dropped; reconnecting",
-        Option.getOrElse(problemOf(cause), () => "interrupted")
-      )
-    ),
+    Effect.tapCause((cause) => {
+      const problem = Option.getOrElse(problemOf(cause), () => "interrupted")
+
+      return Effect.andThen(link.lost(problem), Effect.logWarning("hub link dropped; reconnecting", problem))
+    }),
     Effect.sandbox,
     Effect.retry(backoff),
     Effect.repeat(Schedule.spaced("2 seconds")),
     Effect.provide(meOf(identity))
   )
-})
+}, Effect.scoped)

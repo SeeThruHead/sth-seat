@@ -1,10 +1,11 @@
-import { DateTime, Duration, Option } from "effect"
+import { DateTime, Duration, Option, Result } from "effect"
 import type { MachinePresence, Whereabouts } from "@sth-seat/protocol/Actions.ts"
 import type { MachineLabel, MachineName } from "@sth-seat/protocol/Ids.ts"
 
 export type Sighting = {
   readonly name: MachineName
   readonly label: MachineLabel
+  readonly side: string
   readonly online: boolean
   readonly lastInput: Option.Option<DateTime.Utc>
 }
@@ -27,6 +28,18 @@ export const seatOf = (sightings: ReadonlyArray<Sighting>): Option.Option<Sighti
         }),
       Option.none()
     )
+
+export const offline = (label: MachineLabel): string =>
+  `${label} isn't connected to the hub (its daemon isn't running or lost its link), so the hub can't tell whether the user is at it and opens nothing on another machine. Start its daemon there with \`sth-seat install\`, then check \`sth-seat doctor\`.`
+
+export const seatFor = (sightings: ReadonlyArray<Sighting>, caller: MachineName): Result.Result<Sighting, string> => {
+  const own = sightings.find((sighting) => sighting.name === caller)
+  if (own === undefined) return Result.fail(`The hub doesn't know ${caller}.`)
+  if (!own.online) return Result.fail(offline(own.label))
+  const seat = seatOf(sightings.filter((sighting) => sighting.side === own.side))
+
+  return Result.succeed(Option.getOrElse(seat, () => own))
+}
 
 const idleSecondsOf = (sighting: Sighting, now: DateTime.Utc): Option.Option<number> =>
   Option.map(sighting.lastInput, (lastInput) =>

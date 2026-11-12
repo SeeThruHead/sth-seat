@@ -24,7 +24,7 @@ import type { Tunnels } from "../../domains/tunnels/Tunnels.ts"
 import { Desktop } from "../../platform/Desktop.ts"
 import { CommandFailed } from "../../platform/Processes.ts"
 import { shareGrant } from "../../app/Remote.ts"
-import { Opened, machineIn, recordingDesktop, testMe, writePolicy } from "../../testing/Seat.testing.ts"
+import { Opened, machineIn, recordingDesktop, testMe, tower, writePolicy } from "../../testing/Seat.testing.ts"
 import { execute } from "./handler.ts"
 
 const id = CommandId.make("01a1a546-373d-7506-84ae-c8403ccc0cef")
@@ -219,6 +219,39 @@ describe("execute", () => {
         assert.include(reasonOf(asked), "doesn't let the hub ask-secret (")
         assert.include(reasonOf(stored), "doesn't let the hub store-secret (")
         assert.strictEqual(all.length, 3)
+      })
+    )
+  )
+
+  it.effect("takes deliveries only for itself and the machines under deliveries: from", () =>
+    inMachine(
+      Effect.fnUntraced(function* (folder: string) {
+        const opened = yield* Opened
+        yield* writePolicy(folder, "allow:\n  - from: [hub]\n    can: [receive, read]\ndeliveries:\n  from: [cube]\n")
+        const work = MachineName.make("work")
+        const bytes = new TextEncoder().encode("notes")
+        const outcomes = yield* Effect.forEach(
+          [
+            { _tag: "OpenUrl", id, url, origin: MachineName.make("cube") },
+            { _tag: "OpenUrl", id, url, origin: tower },
+            { _tag: "OpenUrl", id, url, origin: work },
+            { _tag: "OpenUrl", id, url },
+            { _tag: "Notify", id, title: Title.make("Work"), message: "Secret plans.", origin: work },
+            { _tag: "ReceiveFile", id, name: FileName.make("notes.txt"), bytes, origin: work },
+            { _tag: "OpenTunnel", id, origin: work, scheme: "http", port: Port.make(6006), path: "/" },
+            { _tag: "AskSecret", id, name: SecretName.make("t"), question: "Token?", origin: work }
+          ] as const,
+          (command) => execute(command, home)
+        )
+        const all = yield* opened.all
+
+        assert.deepStrictEqual(
+          outcomes.map((outcome) => outcome._tag),
+          ["Done", "Done", "Refused", "Refused", "Refused", "Refused", "Refused", "Refused"]
+        )
+        assert.include(reasonOf(outcomes[2] ?? { _tag: "Done" }), "takes nothing the hub delivers for work")
+        assert.include(reasonOf(outcomes[3] ?? { _tag: "Done" }), "didn't say which machine this came from")
+        assert.deepStrictEqual(all, ["url https://example.com/", "url https://example.com/"])
       })
     )
   )

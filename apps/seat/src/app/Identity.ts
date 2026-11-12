@@ -45,6 +45,10 @@ const nameIn = Effect.fnUntraced(function* (files: IdentityFiles) {
   )
 })
 
+export const machineName = Effect.fn("Identity.machineName")(function* (files: IdentityFiles) {
+  return yield* nameIn(files)
+})
+
 export const readIdentity = Effect.fn("Identity.readIdentity")(function* (files: IdentityFiles) {
   const fs = yield* FileSystem.FileSystem
   const present = yield* fs.exists(files.keyFile).pipe(Effect.orElseSucceed(() => false))

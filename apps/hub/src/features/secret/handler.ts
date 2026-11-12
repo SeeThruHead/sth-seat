@@ -2,11 +2,10 @@ import { Effect, Option } from "effect"
 import type { AskSecretFromAgent, AskSecretRequest, SecretStored } from "@sth-seat/protocol/Actions.ts"
 import { storedSecretPath } from "@sth-seat/protocol/Daemon.ts"
 import type { MachineName } from "@sth-seat/protocol/Ids.ts"
-import { nobodyConnected, seatOf } from "../../domains/presence/Seat.ts"
 import { Roster } from "../../domains/roster/Roster.ts"
 import type { Machine } from "../../domains/roster/Roster.ts"
 import { answered, command, failed, unknownHostname } from "../dispatch/dispatch.ts"
-import { sightings } from "../where/handler.ts"
+import { seatForCaller } from "../where/handler.ts"
 
 const answerTime = "180 seconds"
 
@@ -15,14 +14,18 @@ export const keptOn = (origin: Machine): string =>
 
 export const askSecret = Effect.fn("Secret.askSecret")(function* (request: AskSecretRequest, origin: Machine) {
   if (origin.secrets === "here") return yield* failed(keptOn(origin))
-  const found = yield* sightings
-  const seat = seatOf(found)
-  if (Option.isNone(seat)) return yield* failed(nobodyConnected)
+  const seat = yield* seatForCaller(origin.name)
 
-  yield* Effect.annotateCurrentSpan({ seat: seat.value.name, origin: origin.name, "secret.name": request.name })
+  yield* Effect.annotateCurrentSpan({ seat: seat.name, origin: origin.name, "secret.name": request.name })
   const destination = { machine: origin.label, file: storedSecretPath(request.name) }
-  const prompt = { _tag: "AskSecret", name: request.name, question: request.question, destination } as const
-  const asked = yield* command(seat.value, prompt, answerTime)
+  const prompt = {
+    _tag: "AskSecret",
+    name: request.name,
+    question: request.question,
+    destination,
+    origin: origin.name
+  } as const
+  const asked = yield* command(seat, prompt, answerTime)
   const { value } = yield* answered(asked, "SecretGiven")
 
   const stored = yield* command(origin, { _tag: "StoreSecret", name: request.name, value }, "15 seconds")
@@ -31,7 +34,7 @@ export const askSecret = Effect.fn("Secret.askSecret")(function* (request: AskSe
   const result: SecretStored = {
     machine: origin.name,
     path,
-    message: `The user answered on ${seat.value.label}; the secret is in ${path} on ${origin.label}. Read it from there; don't print it.`
+    message: `The user answered on ${seat.label}; the secret is in ${path} on ${origin.label}. Read it from there; don't print it.`
   }
 
   return result

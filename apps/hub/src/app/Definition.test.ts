@@ -21,7 +21,8 @@ const settingsOf = (machine: Machine) => ({
   name: machine.name,
   label: machine.label,
   hostnames: machine.hostnames,
-  secrets: machine.secrets
+  secrets: machine.secrets,
+  side: machine.side
 })
 
 const settings: HubSettings = {
@@ -91,21 +92,23 @@ describe("MCP endpoint", () => {
     }).pipe(Effect.scoped)
   )
 
-  it.effect("answers where_is_user and explains why open_for_user can't open anything yet", () =>
-    Effect.gen(function* () {
-      const endpoint = yield* mcp("mcp-test-token")
-      const where = yield* endpoint.call("where_is_user", {})
-      const opened = yield* endpoint.call("open_for_user", { target: "https://example.com" })
-      const notified = yield* endpoint.call("notify_user", { title: "Build", message: "It passed." })
-      const asked = yield* endpoint.call("ask_user_secret", { name: "token", question: "Token?", from: "nowhere" })
+  it.effect(
+    "answers where_is_user and explains why open_for_user opens nothing for a machine that isn't connected",
+    () =>
+      Effect.gen(function* () {
+        const endpoint = yield* mcp("mcp-test-token")
+        const where = yield* endpoint.call("where_is_user", {})
+        const opened = yield* endpoint.call("open_for_user", { target: "https://example.com", from: "Tower" })
+        const notified = yield* endpoint.call("notify_user", { title: "Build", message: "It passed.", from: "Tower" })
+        const asked = yield* endpoint.call("ask_user_secret", { name: "token", question: "Token?", from: "nowhere" })
 
-      assert.strictEqual(endpoint.status, 200)
-      assert.include(where.result.content?.[0]?.text, "Tower: not connected")
-      assert.isTrue(opened.result.isError)
-      assert.include(opened.result.content?.[0]?.text, "None of the user's machines")
-      assert.include(notified.result.content?.[0]?.text, "None of the user's machines")
-      assert.include(asked.result.content?.[0]?.text, "doesn't know a machine called nowhere")
-    }).pipe(Effect.scoped)
+        assert.strictEqual(endpoint.status, 200)
+        assert.include(where.result.content?.[0]?.text, "Tower: not connected")
+        assert.isTrue(opened.result.isError)
+        assert.include(opened.result.content?.[0]?.text, "Tower isn't connected to the hub")
+        assert.include(notified.result.content?.[0]?.text, "Tower isn't connected to the hub")
+        assert.include(asked.result.content?.[0]?.text, "doesn't know a machine called nowhere")
+      }).pipe(Effect.scoped)
   )
 
   it.effect("says the session wasn't found when a client comes back with a session the hub forgot", () =>
@@ -192,6 +195,7 @@ const keyedHub = Effect.gen(function* () {
       label: machine.label,
       hostnames: machine.hostnames,
       secrets: machine.secrets,
+      side: machine.side,
       ...Option.match(machine.publicKey, { onNone: () => ({}), onSome: (publicKey) => ({ publicKey }) })
     }))
   }

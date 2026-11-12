@@ -5,11 +5,11 @@ import { RemotePath } from "@sth-seat/protocol/Remote.ts"
 import { copyPlan } from "../../domains/copy/Copy.ts"
 import type { CopyPlan } from "../../domains/copy/Copy.ts"
 import { localTarget } from "../../domains/files/LocalTarget.ts"
-import { askHub } from "../Hub.ts"
-import { RemoteProblem, download, linkTo, runOn, upload } from "../Remote.ts"
+import { askDaemon } from "../LocalClient.ts"
+import { RemoteProblem, download, linkTo, runOn, upload, throughDaemon } from "../Remote.ts"
 import type { Link } from "../Remote.ts"
 import { jsonFlag, report } from "./Output.ts"
-import { machineLayers, withHub } from "./Settings.ts"
+import { machineLayers, withDaemon } from "./Settings.ts"
 
 const run = Command.make(
   "run",
@@ -38,11 +38,11 @@ const run = Command.make(
     )
   },
   Effect.fn("Cli.run")(function* ({ machine, command, cwd, timeout, noInput }) {
-    const found = yield* withHub
+    const found = yield* withDaemon
     const options = { command: command.join(" "), cwd, timeoutSeconds: timeout, input: !noInput }
 
-    yield* askHub(found, (hub, me) =>
-      linkTo(hub, me, machine).pipe(
+    yield* askDaemon(found, (daemon, me) =>
+      linkTo(throughDaemon(daemon), me, machine).pipe(
         Effect.flatMap((link) => runOn(link, options)),
         Effect.scoped
       )
@@ -76,14 +76,14 @@ const cp = Command.make(
     json: jsonFlag
   },
   Effect.fn("Cli.cp")(function* ({ from, to, json }) {
-    const found = yield* withHub
+    const found = yield* withDaemon
     const plan = copyPlan(from, to)
     if (Result.isFailure(plan)) return yield* new RemoteProblem({ problem: plan.failure })
 
     const given = localTarget(plan.success.local, process.cwd(), found.home)
     const local = plan.success.direction === "download" ? yield* intoFolder(given, plan.success.remote) : given
-    const bytes = yield* askHub(found, (hub, me) =>
-      linkTo(hub, me, plan.success.machine).pipe(
+    const bytes = yield* askDaemon(found, (daemon, me) =>
+      linkTo(throughDaemon(daemon), me, plan.success.machine).pipe(
         Effect.flatMap((link) => carried(link, plan.success, local)),
         Effect.scoped
       )

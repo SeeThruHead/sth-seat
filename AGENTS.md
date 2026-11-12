@@ -85,6 +85,8 @@ import transports; `packages/protocol` imports no platform code; `Rpc.make`, `Rp
 - Nothing personal in the repo: no person's name, hostnames, addresses, domains, keys or tokens. Examples use
   placeholders (`seat.example.com`, `desktop`, `laptop`); real values live in each deployment's config and on
   each machine.
+- The CLI talks only to its own daemon (`app/LocalClient.ts` to `app/LocalServer.ts`); only the daemon reads the
+  key and talks to the hub. A stopped daemon makes every command fail with "sth-seat is off".
 - Daemons connect out only, run as the normal user, and sign in with their own key; the hub keeps only public
   keys. The MCP endpoint takes only its one token.
 - A machine does only what its own `policy.yaml` allows, checked on that machine; nothing the hub sends widens
@@ -98,6 +100,9 @@ import transports; `packages/protocol` imports no platform code; `Rpc.make`, `Rp
   document files, never anything the system opener would run; it doesn't rely on the hub's checks for either.
 - A machine with `secrets: here` (its policy, and its entry in the hub's config) keeps its secrets: `ask-secret`
   prompts on it without the hub, its daemon refuses `StoreSecret`, and the hub refuses secret requests from it.
+- Each machine has a hub `side`; open, notify and secret prompts go only to a machine on the caller's side, and
+  never to another machine when the caller's own daemon is offline (the CLI opens locally instead). Deliveries
+  carry `origin`, and a policy's `deliveries: from:` refuses any for a machine not listed.
 - A file sent to the seat (`open`) goes only to the seat, at most 32 MB, regular files only, into its own inbox
   folder. `cp` paths are resolved (`~`, symlinks) on the owning machine before its policy's folders are checked.
 - Daemon protocol schemas only grow: new fields optional, nothing renamed or removed (daemons may be older than

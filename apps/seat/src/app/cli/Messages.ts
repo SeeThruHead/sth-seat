@@ -4,10 +4,10 @@ import { MachineName } from "@sth-seat/protocol/Ids.ts"
 import { MessageText } from "@sth-seat/protocol/Remote.ts"
 import { InboxMessage, Messages } from "../../domains/messages/Messages.ts"
 import type { InboxMessage as Message } from "../../domains/messages/Messages.ts"
-import { askHub } from "../Hub.ts"
-import { RemoteProblem, linkTo, sendMessage } from "../Remote.ts"
+import { askDaemon } from "../LocalClient.ts"
+import { RemoteProblem, linkTo, sendMessage, throughDaemon } from "../Remote.ts"
 import { jsonFlag, report } from "./Output.ts"
-import { machineLayers, settings, withHub } from "./Settings.ts"
+import { machineLayers, withDaemon } from "./Settings.ts"
 
 const Sent = Schema.Struct({ to: MachineName, bytes: Schema.Int })
 
@@ -47,10 +47,10 @@ const send = Command.make(
     json: jsonFlag
   },
   Effect.fn("Cli.send")(function* ({ machine, text, json }) {
-    const found = yield* withHub
+    const found = yield* withDaemon
     const message = yield* messageText(text)
-    const bytes = yield* askHub(found, (hub, me) =>
-      linkTo(hub, me, machine).pipe(
+    const bytes = yield* askDaemon(found, (daemon, me) =>
+      linkTo(throughDaemon(daemon), me, machine).pipe(
         Effect.flatMap((link) => sendMessage(link, message)),
         Effect.scoped
       )
@@ -113,7 +113,7 @@ const inbox = Command.make(
     json: jsonFlag
   },
   Effect.fn("Cli.inbox")(function* (reading) {
-    const found = yield* settings
+    const found = yield* withDaemon
 
     yield* readInbox(reading).pipe(Effect.provide(Messages.layer(found.stateDir)))
   })
