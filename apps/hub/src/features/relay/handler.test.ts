@@ -208,7 +208,10 @@ describe("relay sessions", () => {
           request: { _tag: "Input", bytes: new TextEncoder().encode("x") }
         })
         const refused = yield* Effect.flip(relayMore(cube, intruding))
-        const commands = yield* daemon.seen
+        const commands = yield* Effect.yieldNow.pipe(
+          Effect.andThen(daemon.seen),
+          Effect.repeat({ until: (seen) => seen.length >= 3, times: 1000 })
+        )
 
         assert.strictEqual(starts.length, 3)
         assert.deepStrictEqual(tagsOf(commands), ["Relayed", "Relayed", "Relayed"])
