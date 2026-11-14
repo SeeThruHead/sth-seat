@@ -128,6 +128,15 @@
   `127.0.0.1:<port>` and pipes bytes both ways, so HTTP and WebSockets (live reload) work and the dev server
   never has to listen on the network. The origin's policy needs `tunnel` for the seat. When the seat is the
   origin, the URL opens as it is.
+- **macOS remembers privacy answers across upgrades.** macOS (TCC) files the answer to "sth-seat would like to
+  access ..." under the daemon's identity. A bare executable is filed under its path, and Homebrew's real path has
+  the version in it (`Cellar/sth-seat/<version>/...`); with Bun's ad-hoc signature the code requirement also
+  changes with every build. So every upgrade forgot every answer. Releases now sign the macOS binaries with one
+  self-signed certificate under the identifier `com.seethruhead.sth-seat`, and Homebrew installs them inside a signed
+  `sth-seat.app`, which macOS files under its bundle ID with a requirement (that identifier and that certificate)
+  every later release meets. An answer, Allow or Don't Allow, holds across upgrades. A downloaded binary that
+  `sth-seat install` copies to `~/.local/bin` keeps one path, so it keeps its answers too. No paid Apple account is
+  involved: nothing needs Gatekeeper, since brew and `sth-seat install` don't quarantine what they install.
 - **Openers run detached.** On Linux `xdg-open` can stay attached to the browser it starts, so the daemon starts
   it in its own session, waits up to 3 seconds for an early failure (which it reports), and lets it run.
 - **Run the hub on a network the machines share.** It's meant for a home or office network, or a VPN the

@@ -83,7 +83,9 @@ printf %s "$token" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -
 1. Get the `sth-seat` binary for the machine. With Homebrew (macOS or Linux):
    `brew install seethruhead/tap/sth-seat`. Or download `sth-seat-<os>-<arch>` (`linux-x64`, `linux-arm64`,
    `darwin-arm64`, `darwin-x64`) from the GitHub release, or build all four with
-   `bun install && bun run release` in `apps/seat` (they land in `apps/seat/dist/release/`). It needs nothing
+   `bun install && bun run release` in `apps/seat` (they land in `apps/seat/dist/release/`). Release builds for
+   macOS are signed as `com.seethruhead.sth-seat`, and Homebrew installs them as a signed `sth-seat.app`, so macOS
+   keeps your answers to its privacy prompts across upgrades (see `docs/architecture.md`). It needs nothing
    else installed. On Linux the desktop features also want `swayidle` (idle time), `xdg-mime` and `gtk-launch`
    (links open in the default browser's desktop entry, never through `xdg-open`), `xdg-open` (files),
    `notify-send`, `zenity` and `gdbus` (to show a file in the file manager). On macOS links open with

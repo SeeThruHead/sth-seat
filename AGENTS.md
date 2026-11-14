@@ -33,6 +33,11 @@ Read `README.md` for what it is and how to set it up, and `docs/architecture.md`
   service: run from Homebrew it points the service at `$(brew --prefix)/bin/sth-seat` and copies nothing,
   otherwise it copies the running binary to `~/.local/bin/sth-seat` first; service files come from
   `src/domains/service/Service.ts`. `bun run bundle` still writes `dist/sth-seat.js` for running under Bun.
+- macOS signing: the release workflow then runs `bun run release:sign` (`apps/seat/macos/sign.sh`, with
+  `rcodesign`, the key and certificate from the `MACOS_SIGNING_KEY` and `MACOS_SIGNING_CERT` secrets). It signs
+  both darwin binaries as `com.seethruhead.sth-seat` and packs each into a signed `sth-seat.app`
+  (`sth-seat-darwin-<arch>.app.tar.gz`), which the Homebrew formula installs. Never replace that key: macOS keeps
+  privacy grants only for the same identifier and certificate, so a new key makes every Mac ask again.
 - Mutation testing: `bun run mutate` in `apps/hub` or `apps/seat` (Stryker's command runner, so the suites run
   under Bun; it mutates `src/domains` and `src/features` in place, one mutant at a time, and restores them).
   It takes 10-20 minutes: run it in the background, never two at once, and don't edit that app's source or

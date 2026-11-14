@@ -42,13 +42,17 @@ describe("service files", () => {
       [
         "/opt/homebrew/Cellar/sth-seat/0.4.1/bin/sth-seat",
         "/home/linuxbrew/.linuxbrew/Cellar/sth-seat/0.4.1/bin/sth-seat",
+        "/opt/homebrew/Cellar/sth-seat/0.8.1/sth-seat.app/Contents/MacOS/sth-seat",
         "/home/me/.local/bin/sth-seat",
+        "/home/me/Downloads/sth-seat.app/Contents/MacOS/sth-seat",
         "/opt/homebrew/Cellar/other/1.0/bin/sth-seat",
         "/home/me/Downloads/sth-seat-darwin-arm64"
       ].map(brewStablePath),
       [
         Option.some("/opt/homebrew/bin/sth-seat"),
         Option.some("/home/linuxbrew/.linuxbrew/bin/sth-seat"),
+        Option.some("/opt/homebrew/bin/sth-seat"),
+        Option.none(),
         Option.none(),
         Option.none(),
         Option.none()

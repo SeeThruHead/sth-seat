@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1
+
+- macOS remembers what you answered to sth-seat's privacy prompts ("would like to access data from other apps",
+  Photos, Desktop, Documents, Network Volumes) across upgrades. Releases sign the macOS binaries with a stable
+  certificate as `com.seethruhead.sth-seat`, and Homebrew installs them inside a signed `sth-seat.app`, so macOS
+  files each answer under that bundle ID instead of the versioned Cellar path. After upgrading to 0.8.1, each prompt
+  comes once more (the identity changed); answer it once and it stays answered, Allow or Don't Allow.
+
 ## 0.8.0
 
 - The CLI never talks to the hub. Every command (`open`, `where`, `notify`, `ask-secret`, `run`, `cp`, `send`,

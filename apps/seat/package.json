@@ -11,7 +11,8 @@
     "bundle": "bun build src/app/main.ts --target=bun --outfile dist/sth-seat.js",
     "start": "bun src/app/main.ts",
     "mutate": "stryker run",
-    "release": "bun build --compile --target=bun-linux-x64 src/app/main.ts --outfile dist/release/sth-seat-linux-x64 && bun build --compile --target=bun-linux-arm64 src/app/main.ts --outfile dist/release/sth-seat-linux-arm64 && bun build --compile --target=bun-darwin-arm64 src/app/main.ts --outfile dist/release/sth-seat-darwin-arm64 && bun build --compile --target=bun-darwin-x64 src/app/main.ts --outfile dist/release/sth-seat-darwin-x64"
+    "release": "bun build --compile --target=bun-linux-x64 src/app/main.ts --outfile dist/release/sth-seat-linux-x64 && bun build --compile --target=bun-linux-arm64 src/app/main.ts --outfile dist/release/sth-seat-linux-arm64 && bun build --compile --target=bun-darwin-arm64 src/app/main.ts --outfile dist/release/sth-seat-darwin-arm64 && bun build --compile --target=bun-darwin-x64 src/app/main.ts --outfile dist/release/sth-seat-darwin-x64",
+    "release:sign": "bash macos/sign.sh"
   },
   "dependencies": {
     "@effect/platform-bun": "4.1.2",
