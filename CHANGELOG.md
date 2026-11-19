@@ -1,11 +1,12 @@
 # Changelog
 
-## 0.8.2
+## 0.8.3
 
 - On Linux the idle watcher (`swayidle`) ends whenever the daemon does, however the daemon ends. Before, a daemon
   that was killed outright (`kill -9`, the out-of-memory killer, a crash) left its `swayidle` running with no
   owner, and the restarted daemon started another, so each such ending added one. A normal stop or restart
   already ended it.
+- There is no 0.8.2: it was tagged, its build failed the lint check, and nothing was published under that number.
 
 ## 0.8.1
 
