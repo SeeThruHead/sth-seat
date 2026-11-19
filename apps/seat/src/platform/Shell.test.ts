@@ -2,6 +2,7 @@ import { BunServices } from "@effect/platform-bun"
 import { assert, describe, it } from "@effect/vitest"
 import { Duration, Effect, Layer, Stream } from "effect"
 import type { Event } from "@sth-seat/protocol/Remote.ts"
+import { commandLine } from "../domains/commandline/CommandLine.ts"
 import { Shell, notStartedCode, timedOutCode } from "./Shell.ts"
 
 const text = (events: ReadonlyArray<Event>, channel: "stdout" | "stderr") =>
@@ -40,6 +41,16 @@ describe("Shell", () => {
 
       assert.strictEqual(text(events, "stdout"), "hi there")
       assert.deepStrictEqual(lastOf(events), { _tag: "Exited", code: 0 })
+    })
+  )
+
+  it.live("hands a script given as one of several arguments to its program whole", () =>
+    Effect.gen(function* () {
+      const script = `for n in 1 2; do echo "it's" $(echo $n); done; ls -d /nonexistent/folder`
+      const events = yield* runIn("/bin/sh", commandLine(["sh", "-c", script]))
+
+      assert.strictEqual(text(events, "stdout"), "it's 1\nit's 2\n")
+      assert.include(text(events, "stderr"), "/nonexistent/folder")
     })
   )
 

@@ -79,13 +79,15 @@ The user types it into a hidden prompt on the seat (on this machine itself when 
 
 \`\`\`sh
 sth-seat where                                  # which machine is the seat, and which are connected
-sth-seat run desktop -- make test               # like ssh desktop 'make test'
+sth-seat run desktop -- make test               # a program and its arguments, each arriving as given
+sth-seat run desktop -- sh -c 'for f in *.log; do wc -l "$f"; done'   # the script reaches sh whole
+sth-seat run desktop -- 'cd ~/code/app && git status | head'        # one argument: a command line for its shell
 sth-seat run -n desktop --cwd ~/code/app -- git status
 sth-seat cp desktop:~/logs/app.log ./app.log
 sth-seat cp ./build.tar desktop:/tmp/build.tar
 \`\`\`
 
-- \`run\` uses the other machine's login shell, streams its output, and exits with its exit code. Add \`-n\` when the command reads no input. \`--timeout <seconds>\` (default 600) stops it.
+- \`run\` uses the other machine's login shell, streams its output, and exits with its exit code. Several arguments after \`--\` arrive exactly as given (nothing in them is expanded or split there, so \`$HOME\`, \`~\`, \`*\` and \`&&\` stay literal); for pipes, \`&&\`, globs or variables read on the other machine, give the whole command line as one quoted argument. Add \`-n\` when the command reads no input. \`--timeout <seconds>\` (default 600) stops it.
 - Each machine decides what others may do there (\`~/.config/sth-seat/policy.yaml\`). A refusal says what was refused and why; don't retry it another way, tell the user.
 - Everything you run is logged on the machine it ran on (\`sth-seat log\` there).
 

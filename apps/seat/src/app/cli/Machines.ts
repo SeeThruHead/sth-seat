@@ -2,6 +2,7 @@ import { Effect, FileSystem, Option, Path, Result, Schema } from "effect"
 import { Argument, Command, Flag } from "effect/cli"
 import { MachineName } from "@sth-seat/protocol/Ids.ts"
 import { RemotePath } from "@sth-seat/protocol/Remote.ts"
+import { commandLine } from "../../domains/commandline/CommandLine.ts"
 import { copyPlan } from "../../domains/copy/Copy.ts"
 import type { CopyPlan } from "../../domains/copy/Copy.ts"
 import { localTarget } from "../../domains/files/LocalTarget.ts"
@@ -20,7 +21,9 @@ const run = Command.make(
     ),
     command: Argument.String("command").pipe(
       Argument.variadic({ min: 1 }),
-      Argument.withDescription("The command and its arguments, after --")
+      Argument.withDescription(
+        "After --: one argument is a command line for that machine's shell; several are a program and its arguments, each arriving as given"
+      )
     ),
     cwd: Flag.String("cwd").pipe(
       Flag.withSchema(RemotePath),
@@ -39,7 +42,7 @@ const run = Command.make(
   },
   Effect.fn("Cli.run")(function* ({ machine, command, cwd, timeout, noInput }) {
     const found = yield* withDaemon
-    const options = { command: command.join(" "), cwd, timeoutSeconds: timeout, input: !noInput }
+    const options = { command: commandLine(command), cwd, timeoutSeconds: timeout, input: !noInput }
 
     yield* askDaemon(found, (daemon, me) =>
       linkTo(throughDaemon(daemon), me, machine).pipe(

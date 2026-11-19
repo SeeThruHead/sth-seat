@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.5
+
+- `sth-seat run <machine> -- <program> <arguments...>` delivers each argument exactly as given. Before, the
+  arguments were joined with spaces and the other machine's shell read the result again, so
+  `sth-seat run desktop -- sh -c 'for f in *; do echo $f; done'` gave `sh` only the word `for` and left the rest
+  to the login shell: a parse error in zsh, `$(...)` that came back empty, `ls -d` of a missing path listing the
+  home folder.
+- A single argument is still a command line for the other machine's shell:
+  `sth-seat run desktop -- 'cd ~/code && ls *.md | wc -l'`. With several arguments nothing is expanded there
+  any more, so `sth-seat run desktop -- echo '$HOME'` now prints `$HOME`; quote the whole line as one argument
+  when the other machine should read `$HOME`, `~`, `*`, `|` or `&&`.
+
 ## 0.8.4
 
 - On Linux the idle watcher (`swayidle`) ends whenever the daemon does, however the daemon ends. Before, a daemon
