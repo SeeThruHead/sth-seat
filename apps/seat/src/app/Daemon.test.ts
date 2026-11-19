@@ -11,8 +11,10 @@ const withToolsFrom = `PATH="$0:$PATH" exec "$@"`
 
 const patiently = { times: 500, schedule: Schedule.spaced("20 millis") }
 
+const signalled = (signal: string, pid: string) => run("/bin/sh", ["-c", `kill -${signal} "$0"`, pid], "5 seconds")
+
 const isRunning = (pid: string) =>
-  run("kill", ["-0", pid], "5 seconds").pipe(
+  signalled("0", pid).pipe(
     Effect.as(true),
     Effect.orElseSucceed(() => false)
   )
@@ -45,7 +47,7 @@ describe.skipIf(process.platform !== "linux")("the daemon on Linux", () => {
         )
         const watcher = yield* fs.readFileString(`${folder}/swayidle.pid`).pipe(Effect.retry(patiently))
         const before = yield* isRunning(watcher.trim())
-        yield* run("kill", ["-KILL", String(daemon.pid)], "5 seconds")
+        yield* signalled("KILL", String(daemon.pid))
         const after = yield* isRunning(watcher.trim()).pipe(
           Effect.repeat({ ...patiently, until: (running) => !running })
         )
