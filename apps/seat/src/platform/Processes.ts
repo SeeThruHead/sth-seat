@@ -64,6 +64,22 @@ export const run = Effect.fn("Processes.run")(function* (
   )
 })
 
+const diesWithItsParent = [
+  `"$@" &`,
+  `watched=$!`,
+  `exec 3<&0`,
+  `(while read -r _ <&3; do :; done; kill "$watched") >/dev/null 2>&1 &`,
+  `parentGone=$!`,
+  `trap 'kill "$watched"' TERM INT`,
+  `wait "$watched"`,
+  `ending=$?`,
+  `kill "$parentGone" 2>/dev/null`,
+  `exit "$ending"`
+].join("\n")
+
+const tiedToThisProcess = (command: string, args: ReadonlyArray<string>, env: Environment) =>
+  child("/bin/sh", ["-c", diesWithItsParent, "watched", command, ...args], env)
+
 export const watchLines = Effect.fn("Processes.watchLines")(function* (
   command: string,
   args: ReadonlyArray<string>,
@@ -72,7 +88,7 @@ export const watchLines = Effect.fn("Processes.watchLines")(function* (
 ) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
   const name = describe(command, args)
-  const exitCode = yield* spawner.spawn(child(command, args, env)).pipe(
+  const exitCode = yield* spawner.spawn(tiedToThisProcess(command, args, env)).pipe(
     Effect.flatMap((handle) =>
       handle.stdout.pipe(
         Stream.decodeText(),

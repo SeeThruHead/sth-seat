@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.2
+
+- On Linux the idle watcher (`swayidle`) ends whenever the daemon does, however the daemon ends. Before, a daemon
+  that was killed outright (`kill -9`, the out-of-memory killer, a crash) left its `swayidle` running with no
+  owner, and the restarted daemon started another, so each such ending added one. A normal stop or restart
+  already ended it.
+
 ## 0.8.1
 
 - macOS remembers what you answered to sth-seat's privacy prompts ("would like to access data from other apps",

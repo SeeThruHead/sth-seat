@@ -1,7 +1,19 @@
 import { BunServices } from "@effect/platform-bun"
 import { assert, describe, it } from "@effect/vitest"
-import { Effect, Ref } from "effect"
+import { Effect, FileSystem, Ref, Schedule } from "effect"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
+import { script } from "../testing/Seat.testing.ts"
 import { run, watchLines } from "./Processes.ts"
+
+const watching = `${import.meta.dirname}/../testing/Watching.testing.ts`
+
+const patiently = { times: 150, schedule: Schedule.spaced("20 millis") }
+
+const isRunning = (pid: string) =>
+  run("kill", ["-0", pid], "5 seconds").pipe(
+    Effect.as(true),
+    Effect.catch(() => Effect.succeed(false))
+  )
 
 describe("run", () => {
   it.live("returns what the command printed", () =>
@@ -53,5 +65,23 @@ describe("watchLines", () => {
 
       assert.include(error.message, "sth-seat-no-such-command failed")
     }).pipe(Effect.provide(BunServices.layer))
+  )
+
+  it.live("ends the command when the process watching it is killed outright", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem
+      const folder = yield* fs.makeTempDirectoryScoped()
+      const watched = yield* script(folder, "watched", `echo $$ > ${folder}/watched.pid; exec sleep 60`)
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const watcher = yield* spawner.spawn(ChildProcess.make(process.execPath, [watching, watched]))
+      const watchedPid = yield* fs.readFileString(`${folder}/watched.pid`).pipe(Effect.retry(patiently))
+      const before = yield* isRunning(watchedPid.trim())
+      yield* run("kill", ["-KILL", String(watcher.pid)], "5 seconds")
+      const after = yield* isRunning(watchedPid.trim()).pipe(
+        Effect.repeat({ ...patiently, until: (running) => !running })
+      )
+
+      assert.deepStrictEqual([before, after], [true, false])
+    }).pipe(Effect.scoped, Effect.provide(BunServices.layer))
   )
 })
